@@ -1,0 +1,23 @@
+# .gitignore
+
+# ROS 2 build and install folders
+build/
+install/
+log/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Hidden files
+.*.swp
+*.DS_Store
+
+# Colcon build artifacts
+.colcon/
+*.log
+
+# VSCode settings (optional)
+.vscode/
