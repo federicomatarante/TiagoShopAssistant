@@ -83,16 +83,8 @@ Or simply:
 To generate a new node:
 
 ```bash
-python3 create_node.py <node_name>
+python3 create_node.py <package_nam> <node_name> <executable_name>
 ```
-
-Example:
-
-```bash
-python3 create_node.py my_node
-```
-
-This will create a Python ROS 2 node named `my_node.py` in the appropriate `src/` package folder.
 
 ---
 
@@ -101,13 +93,7 @@ This will create a Python ROS 2 node named `my_node.py` in the appropriate `src/
 To generate a new service:
 
 ```bash
-python3 create_service.py <service_name>
-```
-
-Example:
-
-```bash
-python3 create_service.py add_numbers
+python3 create_service.py  <package_nam> <service_name>
 ```
 
 ---
@@ -115,8 +101,8 @@ python3 create_service.py add_numbers
 ## 🗑 Removing a Node or Service
 
 ```bash
-python3 remove_node.py <node_name>
-python3 remove_service.py <service_name>
+python3 remove_node.py  <package_nam> <node_name> <executable_name>
+python3 remove_service.py  <package_nam> <service_name>
 ```
 
 These scripts clean up any auto-generated files or references.
