@@ -1,0 +1,8 @@
+# Request
+---
+# Response
+int32 width
+int32 height
+int32[] occupancy_grid  # Flattened 2D array
+string[] area_names
+geometry_msgs/Polygon[] areas

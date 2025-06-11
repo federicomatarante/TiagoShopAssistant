@@ -1,0 +1,6 @@
+# Request
+string staff_id
+geometry_msgs/Point position
+---
+# Response
+bool success

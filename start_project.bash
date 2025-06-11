@@ -6,7 +6,9 @@
 # Each entry should be a string in the format "package_name executable_name".
 
 DEFAULT_NODES=(
-    "tiago add_server_executable"
+    "tiago database"
+    "tiago database_tester"
+    "tiago map_provider"
 )
 # =================================================
 

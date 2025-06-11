@@ -1,0 +1,7 @@
+# Request
+geometry_msgs/Point point
+---
+# Response
+bool found
+string area_name
+geometry_msgs/Polygon area

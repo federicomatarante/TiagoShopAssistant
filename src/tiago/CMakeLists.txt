@@ -17,6 +17,7 @@ endif()
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -28,18 +29,46 @@ file(GLOB srv_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "srv/*.srv")
 if(srv_files)
   rosidl_generate_interfaces(${PROJECT_NAME}
     ${srv_files}
+    DEPENDENCIES geometry_msgs std_msgs
   )
 endif()
 
 # Install Python package
 # ament_python_install_package(${PROJECT_NAME})
-
+install(DIRECTORY
+  tiago/
+  DESTINATION ${PYTHON_INSTALL_DIR}/tiago
+  FILES_MATCHING PATTERN "*.py"
+)
+# Install binary files (images) without any processing
+install(
+  DIRECTORY res/
+  DESTINATION share/${PROJECT_NAME}/res
+)
 # Install Python executables
 install(PROGRAMS
   ${PROJECT_NAME}/add_three_ints_server.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME add_server_executable
 )
+install(PROGRAMS
+  ${PROJECT_NAME}/database.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME database
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/database_tester.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME database_tester
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/map_provider.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME map_provider
+)
+
+
+
 
 # Install launch files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)

@@ -1,0 +1,884 @@
+{
+  "staff": [
+    {
+      "staff_id": "S001",
+      "name": "Alex Johnson",
+      "categories": [
+        "Running",
+        "Fitness",
+        "Nutrition"
+      ],
+      "role": "Senior Sales Associate"
+    },
+    {
+      "staff_id": "S002",
+      "name": "Sarah Martinez",
+      "categories": [
+        "Team Sports",
+        "Basketball",
+        "Soccer",
+        "Baseball"
+      ],
+      "role": "Department Manager"
+    },
+    {
+      "staff_id": "S003",
+      "name": "Michael Chen",
+      "categories": [
+        "Outdoor",
+        "Camping",
+        "Hiking",
+        "Climbing"
+      ],
+      "role": "Adventure Specialist"
+    }
+  ],
+  "products": [
+    {
+      "product_id": "P001",
+      "name": "Nike Air Zoom Pegasus 38",
+      "price": 119.99,
+      "description": "Men's running shoe with responsive cushioning and breathable mesh upper. Great for daily training runs.",
+      "category": "Shoes",
+      "brand": "Nike",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P002",
+      "name": "Adidas Ultraboost 21",
+      "price": 180.00,
+      "description": "Premium running shoe with Boost technology for maximum energy return and comfort on long runs.",
+      "category": "Shoes",
+      "brand": "Adidas",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P003",
+      "name": "Under Armour HeatGear Compression Shirt",
+      "price": 29.99,
+      "description": "Short sleeve compression shirt that wicks sweat and dries fast. Perfect for training sessions.",
+      "category": "Apparel",
+      "brand": "Under Armour",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P004",
+      "name": "Spalding NBA Official Game Basketball",
+      "price": 49.99,
+      "description": "Official NBA game ball with premium composite leather cover for superior grip and durability.",
+      "category": "Ball",
+      "brand": "Spalding",
+      "sport_category": "Basketball"
+    },
+    {
+      "product_id": "P005",
+      "name": "Wilson NFL Super Grip Football",
+      "price": 29.99,
+      "description": "Official size football with tacky grip technology for better passes and catches in all weather conditions.",
+      "category": "Ball",
+      "brand": "Wilson",
+      "sport_category": "Football"
+    },
+    {
+      "product_id": "P006",
+      "name": "Coleman 4-Person Dome Tent",
+      "price": 99.99,
+      "description": "Spacious 4-person dome tent with WeatherTec system to keep you dry. Sets up in 10 minutes.",
+      "category": "Tent",
+      "brand": "Coleman",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P007",
+      "name": "Osprey Atmos AG 65 Backpack",
+      "price": 270.00,
+      "description": "Premium hiking backpack with Anti-Gravity suspension for comfortable carrying on multi-day adventures.",
+      "category": "Backpack",
+      "brand": "Osprey",
+      "sport_category": "Hiking"
+    },
+    {
+      "product_id": "P008",
+      "name": "Hydroflask 32oz Water Bottle",
+      "price": 44.95,
+      "description": "Double-wall vacuum insulated stainless steel bottle that keeps drinks cold for 24 hours or hot for 12 hours.",
+      "category": "Water Bottle",
+      "brand": "Hydroflask",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P009",
+      "name": "Fitbit Charge 5",
+      "price": 179.95,
+      "description": "Advanced fitness tracker with built-in GPS, heart rate monitoring, and 7-day battery life.",
+      "category": "Wearable",
+      "brand": "Fitbit",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P010",
+      "name": "Adidas Predator Soccer Cleats",
+      "price": 129.99,
+      "description": "Professional soccer cleats with Controlskin upper for precise ball control and aggressive traction.",
+      "category": "Cleats",
+      "brand": "Adidas",
+      "sport_category": "Soccer"
+    },
+    {
+      "product_id": "P011",
+      "name": "Rawlings Heart of the Hide Baseball Glove",
+      "price": 249.99,
+      "description": "Premium leather baseball glove with pro-grade construction for superior performance and durability.",
+      "category": "Glove",
+      "brand": "Rawlings",
+      "sport_category": "Baseball"
+    },
+    {
+      "product_id": "P012",
+      "name": "Black Diamond Climbing Harness",
+      "price": 79.95,
+      "description": "Lightweight and durable climbing harness with four pressure-molded gear loops and adjustable leg loops.",
+      "category": "Harness",
+      "brand": "Black Diamond",
+      "sport_category": "Climbing"
+    },
+    {
+      "product_id": "P013",
+      "name": "Optimum Nutrition Gold Standard Whey Protein",
+      "price": 59.99,
+      "description": "5lb tub of premium whey protein with 24g protein per serving. Available in multiple flavors.",
+      "category": "Supplement",
+      "brand": "Optimum Nutrition",
+      "sport_category": "Nutrition"
+    },
+    {
+      "product_id": "P014",
+      "name": "Bowflex SelectTech 552 Adjustable Dumbbells",
+      "price": 399.99,
+      "description": "Space-saving adjustable dumbbells that replace 15 sets of weights, adjustable from 5 to 52.5 lbs.",
+      "category": "Weights",
+      "brand": "Bowflex",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P015",
+      "name": "Brooks Ghost 14 Women's Running Shoes",
+      "price": 129.99,
+      "description": "Women's neutral running shoe with DNA LOFT cushioning for a soft, smooth ride on daily runs.",
+      "category": "Shoes",
+      "brand": "Brooks",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P016",
+      "name": "The North Face Recon Backpack",
+      "price": 99.00,
+      "description": "Versatile 30L backpack with padded laptop sleeve and FlexVent suspension system for day hikes or commuting.",
+      "category": "Backpack",
+      "brand": "The North Face",
+      "sport_category": "Hiking"
+    },
+    {
+      "product_id": "P017",
+      "name": "Wilson Evolution Basketball",
+      "price": 69.99,
+      "description": "Top-rated indoor game basketball with premium moisture-absorbing microfiber composite leather.",
+      "category": "Ball",
+      "brand": "Wilson",
+      "sport_category": "Basketball"
+    },
+    {
+      "product_id": "P018",
+      "name": "Yeti Tundra 45 Cooler",
+      "price": 299.99,
+      "description": "Premium hard cooler with rotomolded construction and 3 inches of PermaFrost insulation for ice retention.",
+      "category": "Cooler",
+      "brand": "Yeti",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P019",
+      "name": "Nike Mercurial Vapor Soccer Ball",
+      "price": 39.99,
+      "description": "Durable soccer ball with aerodynamic groove pattern for accurate flight. FIFA Quality Pro certified.",
+      "category": "Ball",
+      "brand": "Nike",
+      "sport_category": "Soccer"
+    },
+    {
+      "product_id": "P020",
+      "name": "Garmin Forerunner 245 GPS Watch",
+      "price": 299.99,
+      "description": "Advanced GPS running watch with performance monitoring features, music storage, and 7-day battery life.",
+      "category": "Watch",
+      "brand": "Garmin",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P021",
+      "name": "Patagonia Better Sweater Fleece Jacket",
+      "price": 139.00,
+      "description": "Versatile zip-up fleece jacket made from 100% recycled polyester with a sweater-knit face and soft fleece interior.",
+      "category": "Jacket",
+      "brand": "Patagonia",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P022",
+      "name": "Salomon Speedcross 5 Trail Running Shoes",
+      "price": 130.00,
+      "description": "Aggressive grip trail running shoes with precise foothold and lightweight construction for technical trails.",
+      "category": "Shoes",
+      "brand": "Salomon",
+      "sport_category": "Trail Running"
+    },
+    {
+      "product_id": "P023",
+      "name": "Manduka PRO Yoga Mat",
+      "price": 120.00,
+      "description": "Ultra-dense and spacious yoga mat providing superior cushioning and unmatched durability with a lifetime guarantee.",
+      "category": "Yoga Mat",
+      "brand": "Manduka",
+      "sport_category": "Yoga"
+    },
+    {
+      "product_id": "P024",
+      "name": "Giro Aether MIPS Cycling Helmet",
+      "price": 325.00,
+      "description": "Premium road cycling helmet featuring MIPS Spherical technology for advanced protection and superior ventilation.",
+      "category": "Helmet",
+      "brand": "Giro",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P025",
+      "name": "TaylorMade SIM2 Max Driver",
+      "price": 499.99,
+      "description": "Golf driver with forged ring construction for increased distance, forgiveness, and optimal launch conditions.",
+      "category": "Golf Club",
+      "brand": "TaylorMade",
+      "sport_category": "Golf"
+    },
+    {
+      "product_id": "P026",
+      "name": "Speedo Vanquisher 2.0 Swim Goggles",
+      "price": 22.00,
+      "description": "Competition swim goggles with UV protection, anti-fog coating, and cushioned silicone seals for comfort.",
+      "category": "Goggles",
+      "brand": "Speedo",
+      "sport_category": "Swimming"
+    },
+    {
+      "product_id": "P027",
+      "name": "REI Co-op Half Dome 2 Plus Tent",
+      "price": 279.00,
+      "description": "Spacious 2-person backpacking tent with vertical walls, two doors, and vestibules for gear storage.",
+      "category": "Tent",
+      "brand": "REI",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P028",
+      "name": "Easton Ghost Double Barrel Fastpitch Bat",
+      "price": 349.99,
+      "description": "Two-piece fastpitch softball bat with double barrel design for explosive power and extended sweet spot.",
+      "category": "Bat",
+      "brand": "Easton",
+      "sport_category": "Softball"
+    },
+    {
+      "product_id": "P029",
+      "name": "NordicTrack Commercial 1750 Treadmill",
+      "price": 1899.00,
+      "description": "Premium home treadmill with 10-inch touchscreen, automatic incline control, and iFit compatibility.",
+      "category": "Treadmill",
+      "brand": "NordicTrack",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P030",
+      "name": "Titleist Pro V1 Golf Balls (Dozen)",
+      "price": 49.99,
+      "description": "Tour-proven golf balls with exceptional distance, consistent flight, short game control, and soft feel.",
+      "category": "Golf Balls",
+      "brand": "Titleist",
+      "sport_category": "Golf"
+    },
+    {
+      "product_id": "P031",
+      "name": "Specialized S-Works Road Shoes",
+      "price": 425.00,
+      "description": "Ultra-light, performance road cycling shoes with stiff carbon sole and precision fit system for power transfer.",
+      "category": "Shoes",
+      "brand": "Specialized",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P032",
+      "name": "JanSport Big Student Backpack",
+      "price": 48.00,
+      "description": "Large capacity backpack with multiple compartments, ergonomic shoulder straps, and durable construction.",
+      "category": "Backpack",
+      "brand": "JanSport",
+      "sport_category": "School"
+    },
+    {
+      "product_id": "P033",
+      "name": "Mizuno Wave Rider 25 Running Shoes",
+      "price": 135.00,
+      "description": "Neutral running shoes with responsive midsole, breathable engineered mesh, and smooth transition from heel to toe.",
+      "category": "Shoes",
+      "brand": "Mizuno",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P034",
+      "name": "Callaway Rogue ST Max Irons Set",
+      "price": 999.99,
+      "description": "Game-improvement iron set with high launch, enhanced forgiveness, and premium A.I. designed face technology.",
+      "category": "Golf Clubs",
+      "brand": "Callaway",
+      "sport_category": "Golf"
+    },
+    {
+      "product_id": "P035",
+      "name": "CamelBak Eddy+ 1L Water Bottle",
+      "price": 15.00,
+      "description": "BPA-free water bottle with leak-proof bite valve, easy-carry handle, and durable construction.",
+      "category": "Water Bottle",
+      "brand": "CamelBak",
+      "sport_category": "Hydration"
+    },
+    {
+      "product_id": "P036",
+      "name": "The North Face ThermoBall Eco Jacket",
+      "price": 199.00,
+      "description": "Lightweight insulated jacket with synthetic ThermoBall technology for warmth even when wet, made from recycled materials.",
+      "category": "Jacket",
+      "brand": "The North Face",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P037",
+      "name": "Concept2 Model D Indoor Rowing Machine",
+      "price": 900.00,
+      "description": "Commercial-grade rowing machine with performance monitor, adjustable damper, and foldable design for storage.",
+      "category": "Rower",
+      "brand": "Concept2",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P038",
+      "name": "Osprey Daylite Plus Daypack",
+      "price": 70.00,
+      "description": "Versatile 20L daypack with mesh-covered back panel, multiple compartments, and hydration compatibility.",
+      "category": "Backpack",
+      "brand": "Osprey",
+      "sport_category": "Hiking"
+    },
+    {
+      "product_id": "P039",
+      "name": "Wilson Ultra Tennis Racket",
+      "price": 89.99,
+      "description": "All-court tennis racket with power frame design, volcanic frame technology, and comfortable grip.",
+      "category": "Racket",
+      "brand": "Wilson",
+      "sport_category": "Tennis"
+    },
+    {
+      "product_id": "P040",
+      "name": "Thule T2 Pro XT Bike Rack",
+      "price": 629.95,
+      "description": "Premium hitch-mounted bike rack that securely carries two bikes with frame-free contact and tool-free installation.",
+      "category": "Bike Rack",
+      "brand": "Thule",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P041",
+      "name": "Asics Gel-Kayano 28 Running Shoes",
+      "price": 160.00,
+      "description": "Stability running shoes with GEL cushioning, Dynamic DuoMax Support System, and FlyteFoam technology.",
+      "category": "Shoes",
+      "brand": "Asics",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P042",
+      "name": "GoPro HERO10 Black",
+      "price": 399.99,
+      "description": "Waterproof action camera with 5.3K video, 23MP photos, advanced stabilization, and front-facing display.",
+      "category": "Camera",
+      "brand": "GoPro",
+      "sport_category": "Action Sports"
+    },
+    {
+      "product_id": "P043",
+      "name": "PowerBlock Elite Adjustable Dumbbells",
+      "price": 329.00,
+      "description": "Space-saving adjustable dumbbells that replace 16 pairs of weights, adjustable from 5 to 50 lbs per hand.",
+      "category": "Weights",
+      "brand": "PowerBlock",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P044",
+      "name": "Hobie Mirage Passport 10.5 Kayak",
+      "price": 1599.00,
+      "description": "Pedal-drive kayak with kick-up rudder, comfortable seat, rod holders, and accessory mounting tracks.",
+      "category": "Kayak",
+      "brand": "Hobie",
+      "sport_category": "Watersports"
+    },
+    {
+      "product_id": "P045",
+      "name": "Columbia Watertight II Rain Jacket",
+      "price": 59.99,
+      "description": "Waterproof and breathable rain jacket with Omni-Shield technology, adjustable hood, and zippered pockets.",
+      "category": "Jacket",
+      "brand": "Columbia",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P046",
+      "name": "Volkl Deacon 84 Skis with Bindings",
+      "price": 999.99,
+      "description": "All-mountain skis with wood core, titanium layers for stability, and versatile 84mm waist width.",
+      "category": "Skis",
+      "brand": "Volkl",
+      "sport_category": "Skiing"
+    },
+    {
+      "product_id": "P047",
+      "name": "Trigger Point GRID Foam Roller",
+      "price": 34.99,
+      "description": "Firm foam roller with multi-density surface pattern for targeting different muscle groups during recovery.",
+      "category": "Recovery",
+      "brand": "Trigger Point",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P048",
+      "name": "Louisville Slugger 2022 Meta BBCOR Bat",
+      "price": 499.95,
+      "description": "Premium BBCOR baseball bat with three-piece design, maximum sweet spot, and premium EKO composite barrel.",
+      "category": "Bat",
+      "brand": "Louisville Slugger",
+      "sport_category": "Baseball"
+    },
+    {
+      "product_id": "P049",
+      "name": "Pearl Izumi Elite Cycling Shorts",
+      "price": 130.00,
+      "description": "Premium padded cycling shorts with compression fit, multi-panel construction, and moisture-wicking fabric.",
+      "category": "Shorts",
+      "brand": "Pearl Izumi",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P050",
+      "name": "UA HOVR Phantom 2 Running Shoes",
+      "price": 150.00,
+      "description": "Connected running shoes with HOVR cushioning, breathable upper, and built-in sensors to track performance metrics.",
+      "category": "Shoes",
+      "brand": "Under Armour",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P051",
+      "name": "Nathan VaporAir 2.0 7L Hydration Vest",
+      "price": 149.99,
+      "description": "Lightweight running vest with 2L hydration bladder, front pockets for essentials, and bounce-free fit.",
+      "category": "Hydration Vest",
+      "brand": "Nathan",
+      "sport_category": "Trail Running"
+    },
+    {
+      "product_id": "P052",
+      "name": "Nike Mercurial Superfly Elite Soccer Cleats",
+      "price": 275.00,
+      "description": "Elite-level soccer cleats with Flyknit upper, Dynamic Fit collar, and chevron studs for explosive acceleration.",
+      "category": "Cleats",
+      "brand": "Nike",
+      "sport_category": "Soccer"
+    },
+    {
+      "product_id": "P053",
+      "name": "Shimano 105 R7000 Road Bike Groupset",
+      "price": 699.99,
+      "description": "Complete road bike drivetrain system with shifters, derailleurs, crankset, brakes, and cassette.",
+      "category": "Bike Components",
+      "brand": "Shimano",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P054",
+      "name": "Black Diamond Storm 400 Headlamp",
+      "price": 49.95,
+      "description": "Waterproof headlamp with 400 lumens, multiple lighting modes, and PowerTap technology for quick brightness adjustments.",
+      "category": "Headlamp",
+      "brand": "Black Diamond",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P055",
+      "name": "Peloton Bike+",
+      "price": 2495.00,
+      "description": "Premium indoor cycling bike with rotating HD touchscreen, auto-follow resistance, and integrated Apple GymKit.",
+      "category": "Exercise Bike",
+      "brand": "Peloton",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P056",
+      "name": "Marmot Trestles 15 Sleeping Bag",
+      "price": 109.00,
+      "description": "Synthetic sleeping bag rated to 15°F with SpiraFil insulation, anatomical foot box, and dual zippers.",
+      "category": "Sleeping Bag",
+      "brand": "Marmot",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P057",
+      "name": "Demarini CF Zen Fastpitch Bat",
+      "price": 379.95,
+      "description": "Two-piece composite fastpitch softball bat with Paraflex Plus composite barrel for maximum performance.",
+      "category": "Bat",
+      "brand": "Demarini",
+      "sport_category": "Softball"
+    },
+    {
+      "product_id": "P058",
+      "name": "Cotopaxi Allpa 35L Travel Pack",
+      "price": 200.00,
+      "description": "Rugged carry-on compatible backpack with zippered mesh compartments, padded laptop sleeve, and theft-proof webbing.",
+      "category": "Backpack",
+      "brand": "Cotopaxi",
+      "sport_category": "Travel"
+    },
+    {
+      "product_id": "P059",
+      "name": "Yakima SkyBox 16 Cargo Box",
+      "price": 629.00,
+      "description": "Aerodynamic roof cargo box with 16 cubic feet of storage, dual-side opening, and tool-free installation.",
+      "category": "Cargo Box",
+      "brand": "Yakima",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P060",
+      "name": "Gregory Baltoro 75 Backpack",
+      "price": 329.95,
+      "description": "Technical backpacking pack with custom-fit harness, pivoting hipbelt, and weatherproof construction.",
+      "category": "Backpack",
+      "brand": "Gregory",
+      "sport_category": "Backpacking"
+    },
+    {
+      "product_id": "P061",
+      "name": "Beats Fit Pro Wireless Earbuds",
+      "price": 199.99,
+      "description": "Secure-fit earbuds with active noise cancellation, spatial audio, and sweat resistance for workouts.",
+      "category": "Earbuds",
+      "brand": "Beats",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P062",
+      "name": "Burton Custom Flying V Snowboard",
+      "price": 599.95,
+      "description": "All-mountain snowboard with hybrid camber profile, directional shape, and responsive flex pattern.",
+      "category": "Snowboard",
+      "brand": "Burton",
+      "sport_category": "Snowboarding"
+    },
+    {
+      "product_id": "P063",
+      "name": "Atomic Hawx Prime 110 S Ski Boots",
+      "price": 499.99,
+      "description": "All-mountain ski boots with memory fit shell, 3D liner, and progressive flex for intermediate to advanced skiers.",
+      "category": "Ski Boots",
+      "brand": "Atomic",
+      "sport_category": "Skiing"
+    },
+    {
+      "product_id": "P064",
+      "name": "Saucony Endorphin Speed 2 Running Shoes",
+      "price": 160.00,
+      "description": "Lightweight training shoes with nylon plate, PWRRUN PB cushioning, and SPEEDROLL technology for fast turnover.",
+      "category": "Shoes",
+      "brand": "Saucony",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P065",
+      "name": "Merrell Moab 2 Mid Waterproof Hiking Boots",
+      "price": 145.00,
+      "description": "Waterproof hiking boots with protective toe cap, supportive footbed, and Vibram traction outsole.",
+      "category": "Boots",
+      "brand": "Merrell",
+      "sport_category": "Hiking"
+    },
+    {
+      "product_id": "P066",
+      "name": "Garmin Edge 830 Cycling Computer",
+      "price": 399.99,
+      "description": "GPS cycling computer with touchscreen display, performance metrics, navigation, and incident detection.",
+      "category": "Bike Computer",
+      "brand": "Garmin",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P067",
+      "name": "TRX HOME2 Suspension Trainer",
+      "price": 199.95,
+      "description": "Complete bodyweight resistance training system with adjustable straps, anchoring solutions, and workout guide.",
+      "category": "Training Equipment",
+      "brand": "TRX",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P068",
+      "name": "Head Graphene 360+ Speed Pro Tennis Racket",
+      "price": 269.00,
+      "description": "Tour-level tennis racket with 18x20 string pattern, head-light balance, and Graphene 360+ technology.",
+      "category": "Racket",
+      "brand": "Head",
+      "sport_category": "Tennis"
+    },
+    {
+      "product_id": "P069",
+      "name": "Nemo Dragonfly 2P Backpacking Tent",
+      "price": 429.95,
+      "description": "Ultralight 2-person tent with premium DAC Featherlite poles, large doors, and protected vestibules.",
+      "category": "Tent",
+      "brand": "Nemo",
+      "sport_category": "Backpacking"
+    },
+    {
+      "product_id": "P070",
+      "name": "Petzl Grigri Belay Device",
+      "price": 109.95,
+      "description": "Assisted braking belay device for rock climbing with ergonomic handle and progressive descent control.",
+      "category": "Climbing Gear",
+      "brand": "Petzl",
+      "sport_category": "Climbing"
+    },
+    {
+      "product_id": "P071",
+      "name": "Rogue Fitness Echo Bike",
+      "price": 795.00,
+      "description": "Heavy-duty air bike with belt drive, steel construction, and LCD console for intense cardio workouts.",
+      "category": "Exercise Bike",
+      "brand": "Rogue",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P072",
+      "name": "La Sportiva Miura VS Climbing Shoes",
+      "price": 185.00,
+      "description": "High-performance climbing shoes with aggressive downturn, Vibram XS Edge rubber, and patented P3 platform.",
+      "category": "Shoes",
+      "brand": "La Sportiva",
+      "sport_category": "Climbing"
+    },
+    {
+      "product_id": "P073",
+      "name": "Blizzard Bonafide 97 Skis",
+      "price": 749.95,
+      "description": "All-mountain skis with True Blend wood core, carbon reinforcement, and versatile 97mm waist width.",
+      "category": "Skis",
+      "brand": "Blizzard",
+      "sport_category": "Skiing"
+    },
+    {
+      "product_id": "P074",
+      "name": "Lululemon Align High-Rise Pants",
+      "price": 98.00,
+      "description": "Buttery-soft yoga pants with four-way stretch, sweat-wicking fabric, and lightweight feel for yoga and everyday wear.",
+      "category": "Pants",
+      "brand": "Lululemon",
+      "sport_category": "Yoga"
+    },
+    {
+      "product_id": "P075",
+      "name": "Arc'teryx Beta AR Gore-Tex Jacket",
+      "price": 599.00,
+      "description": "Versatile waterproof shell jacket with Gore-Tex Pro fabric, helmet-compatible hood, and durable construction.",
+      "category": "Jacket",
+      "brand": "Arc'teryx",
+      "sport_category": "Outdoor"
+    },
+    {
+      "product_id": "P076",
+      "name": "Smartwool PhD Run Light Elite Socks",
+      "price": 22.95,
+      "description": "Performance running socks with targeted cushioning, merino wool blend, and virtually seamless toe.",
+      "category": "Socks",
+      "brand": "Smartwool",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P077",
+      "name": "Canyon Aeroad CF SL 8 Disc Road Bike",
+      "price": 4999.00,
+      "description": "Aero carbon road bike with electronic shifting, hydraulic disc brakes, and wind-tunnel optimized frame design.",
+      "category": "Bike",
+      "brand": "Canyon",
+      "sport_category": "Cycling"
+    },
+    {
+      "product_id": "P078",
+      "name": "Callaway Chrome Soft X Golf Balls (Dozen)",
+      "price": 49.99,
+      "description": "Premium tour-level golf balls with urethane cover, dual SoftFast core, and optimized aerodynamics.",
+      "category": "Golf Balls",
+      "brand": "Callaway",
+      "sport_category": "Golf"
+    },
+    {
+      "product_id": "P079",
+      "name": "Oiselle Flyout Sports Bra",
+      "price": 58.00,
+      "description": "High-impact sports bra with compressive support, moisture-wicking fabric, and wide straps for comfort.",
+      "category": "Sports Bra",
+      "brand": "Oiselle",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P080",
+      "name": "MSR PocketRocket 2 Stove",
+      "price": 49.95,
+      "description": "Ultralight backpacking stove that boils water quickly with adjustable flame control and compact folding design.",
+      "category": "Stove",
+      "brand": "MSR",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P081",
+      "name": "Hoka Bondi 7 Running Shoes",
+      "price": 160.00,
+      "description": "Maximum cushioned running shoes with meta-rocker geometry, breathable upper, and plush memory foam collar.",
+      "category": "Shoes",
+      "brand": "Hoka",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P082",
+      "name": "Daiwa Tatula Elite Casting Rod",
+      "price": 199.99,
+      "description": "Premium bass fishing rod with X45 Bias graphite construction, Fuji K-guides, and custom reel seat.",
+      "category": "Fishing Rod",
+      "brand": "Daiwa",
+      "sport_category": "Fishing"
+    },
+    {
+      "product_id": "P083",
+      "name": "Simms G3 Guide Waders",
+      "price": 599.95,
+      "description": "Premium chest waders with GORE-TEX Pro Shell fabric, anatomical fit, and reinforced construction for durability.",
+      "category": "Waders",
+      "brand": "Simms",
+      "sport_category": "Fishing"
+    },
+    {
+      "product_id": "P084",
+      "name": "CCM Super Tacks AS3 Pro Ice Hockey Skates",
+      "price": 999.99,
+      "description": "Elite-level hockey skates with one-piece boot construction, SpeedBlade XS holder, and carbon composite outsole.",
+      "category": "Skates",
+      "brand": "CCM",
+      "sport_category": "Hockey"
+    },
+    {
+      "product_id": "P085",
+      "name": "Fjällräven Kånken Backpack",
+      "price": 80.00,
+      "description": "Iconic backpack with durable Vinylon F fabric, spacious main compartment, and comfortable shoulder straps.",
+      "category": "Backpack",
+      "brand": "Fjällräven",
+      "sport_category": "Everyday"
+    },
+    {
+      "product_id": "P086",
+      "name": "Smith Optics I/O MAG ChromaPop Snow Goggles",
+      "price": 270.00,
+      "description": "Premium snow goggles with interchangeable magnetic lens system, ChromaPop lenses, and 3-layer foam for comfort.",
+      "category": "Goggles",
+      "brand": "Smith",
+      "sport_category": "Skiing"
+    },
+    {
+      "product_id": "P087",
+      "name": "ProForm Pro 2000 Treadmill",
+      "price": 1499.00,
+      "description": "Advanced home treadmill with 3.25 CHP motor, -3% decline to 12% incline range, and 10-inch HD touchscreen.",
+      "category": "Treadmill",
+      "brand": "ProForm",
+      "sport_category": "Fitness"
+    },
+    {
+      "product_id": "P088",
+      "name": "Sea to Summit Ultralight Insulated Sleeping Pad",
+      "price": 149.95,
+      "description": "Lightweight air mattress with Air Sprung Cells, Thermolite insulation, and multi-function valve for easy inflation.",
+      "category": "Sleeping Pad",
+      "brand": "Sea to Summit",
+      "sport_category": "Camping"
+    },
+    {
+      "product_id": "P089",
+      "name": "New Balance Fresh Foam 1080v11 Running Shoes",
+      "price": 149.99,
+      "description": "Premium cushioned running shoes with Fresh Foam X midsole, Hypoknit upper, and Ultra Heel design.",
+      "category": "Shoes",
+      "brand": "New Balance",
+      "sport_category": "Running"
+    },
+    {
+      "product_id": "P090",
+      "name": "Rossignol Experience 88 Ti Skis with Bindings",
+      "price": 749.99,
+      "description": "Versatile all-mountain skis with wood core, titanal layer, and Drive Tip technology for edge grip and stability.",
+      "category": "Skis",
+      "brand": "Rossignol",
+      "sport_category": "Skiing"
+    },
+    {
+      "product_id": "P091",
+      "name": "Garmin Approach S62 Golf Watch",
+      "price": 499.99,
+      "description": "Premium GPS golf watch with virtual caddie, color touchscreen, and 41,000+ preloaded courses.",
+      "category": "Watch",
+      "brand": "Garmin",
+      "sport_category": "Golf"
+    },
+    {
+      "product_id": "P092",
+      "name": "Klean Kanteen TKWide 20oz Insulated Bottle",
+      "price": 34.95,
+      "description": "Vacuum insulated stainless steel bottle with TK Closure internal thread design and leak-proof cap.",
+      "category": "Water Bottle",
+      "brand": "Klean Kanteen",
+      "sport_category": "Hydration"
+    },
+    {
+      "product_id": "P093",
+      "name": "Patagonia Black Hole 55L Duffel Bag",
+      "price": 139.00,
+      "description": "Weather-resistant expedition duffel with padded shoulder straps, internal organization, and ripstop recycled materials.",
+      "category": "Duffel Bag",
+      "brand": "Patagonia",
+      "sport_category": "Travel"
+    },
+    {
+      "product_id": "P094",
+      "name": "Mountain Hardwear Ghost Whisperer/2 Down Jacket",
+      "price": 325.00,
+      "description": "Ultralight 800-fill down jacket with recycled ripstop shell and packable design for backpacking and climbing.",
+      "category": "Jacket",
+      "brand": "Mountain Hardwear",
+      "sport_category": "Outdoor"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# Request
+int32 x
+int32 y
+---
+# Response
+bool valid_coordinates
+bool occupied
