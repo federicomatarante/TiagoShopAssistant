@@ -73,6 +73,12 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME test_database_node
 )
+install(PROGRAMS
+  ${PROJECT_NAME}/path_planner.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME path_planner
+)
+
 
 # Install launch files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)
