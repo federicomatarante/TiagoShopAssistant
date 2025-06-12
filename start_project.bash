@@ -10,6 +10,7 @@ DEFAULT_NODES=(
     "tiago map_tester"
     "tiago database_interface"
     "tiago test_database_node"
+    "tiago vision_controller"
 )
 
 # === Tmux Configuration ===

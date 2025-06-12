@@ -58,21 +58,27 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME map_provider
 )
+#install(PROGRAMS
+#  ${PROJECT_NAME}/map_tester.py
+#  DESTINATION lib/${PROJECT_NAME}
+#  RENAME map_tester
+#)
+#install(PROGRAMS
+#  ${PROJECT_NAME}/database_interface.py
+#  DESTINATION lib/${PROJECT_NAME}
+#  RENAME database_interface
+#)
+#install(PROGRAMS
+#  ${PROJECT_NAME}/test_database_node.py
+#  DESTINATION lib/${PROJECT_NAME}
+#  RENAME test_database_node
+#)
 install(PROGRAMS
-  ${PROJECT_NAME}/map_tester.py
+  ${PROJECT_NAME}/vision_controller.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME map_tester
+  RENAME vision_controller
 )
-install(PROGRAMS
-  ${PROJECT_NAME}/database_interface.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME database_interface
-)
-install(PROGRAMS
-  ${PROJECT_NAME}/test_database_node.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME test_database_node
-)
+
 
 # Install launch files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)
