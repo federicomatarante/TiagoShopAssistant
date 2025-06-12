@@ -22,12 +22,18 @@ find_package(ament_cmake_python REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
+find_package(rosidl_default_generators REQUIRED)
+
+# Get all msg files with relative paths
+file(GLOB msg_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "msg/*.msg") # <-- ADD THIS LINE
+
 # Get all srv files with relative paths
 file(GLOB srv_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "srv/*.srv")
 
-# Generate interfaces (services)
-if(srv_files)
+# Generate interfaces (services and messages)
+if(srv_files OR msg_files) # <-- MODIFIED THIS LINE
   rosidl_generate_interfaces(${PROJECT_NAME}
+    ${msg_files}   # <-- ADD THIS LINE
     ${srv_files}
     DEPENDENCIES geometry_msgs std_msgs
   )
@@ -46,29 +52,27 @@ install(
   DESTINATION share/${PROJECT_NAME}/res
 )
 # Install Python executables
-install(PROGRAMS
-  ${PROJECT_NAME}/add_three_ints_server.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME add_server_executable
-)
-install(PROGRAMS
-  ${PROJECT_NAME}/database.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME database
-)
-install(PROGRAMS
-  ${PROJECT_NAME}/database_tester.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME database_tester
-)
+
 install(PROGRAMS
   ${PROJECT_NAME}/map_provider.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME map_provider
 )
-
-
-
+install(PROGRAMS
+  ${PROJECT_NAME}/map_tester.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME map_tester
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/database_interface.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME database_interface
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/test_database_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME test_database_node
+)
 
 # Install launch files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)

@@ -4,11 +4,8 @@ from typing import List, Dict
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from tiago.lib.database.entities import Customer, Product, Staff
 from torch import cosine_similarity
-from transformers import AutoTokenizer, AutoModel
-
-from data.database.entities import Customer, Product, Staff
 
 
 # TODO around all the code, use torch on GPU to make it faster! Optimize!

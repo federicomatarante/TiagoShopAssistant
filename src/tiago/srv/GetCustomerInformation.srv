@@ -1,0 +1,5 @@
+# Service to retrieve a customer's information.
+string customer_id
+---
+bool success
+tiago/Customer customer

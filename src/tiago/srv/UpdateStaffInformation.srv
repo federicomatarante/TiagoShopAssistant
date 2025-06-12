@@ -1,0 +1,4 @@
+# Service to update a staff member's information.
+tiago/Staff staff
+---
+bool success

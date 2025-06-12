@@ -1,7 +1,7 @@
 import pickle
 from sqlalchemy import Column, String, Float, JSON, LargeBinary, Boolean
 
-from data.database.entities import Customer, Staff, Product
+from tiago.lib.database.entities import Customer, Staff, Product
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()

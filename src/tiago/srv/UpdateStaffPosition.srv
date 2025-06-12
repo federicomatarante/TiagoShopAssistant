@@ -1,6 +1,5 @@
-# Request
+# Service to update the physical position of a staff member.
 string staff_id
 geometry_msgs/Point position
 ---
-# Response
 bool success

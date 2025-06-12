@@ -1,25 +1,4 @@
-# Request
-string customer_id
-string name
-string age_category
-string gender
-string[] preferences
-string size_info
-string budget
-string[] products_of_interest
-string purchase_intent
-bool follow_up_needed
-string conversation_summary
+# Service to update a customer's information.
+tiago/Customer customer
 ---
-# Response (full Customer info, including a generated ID)
-string customer_id
-string name
-string age_category
-string gender
-string[] preferences
-string size_info
-string budget
-string[] products_of_interest
-string purchase_intent
-bool follow_up_needed
-string conversation_summary
+bool success

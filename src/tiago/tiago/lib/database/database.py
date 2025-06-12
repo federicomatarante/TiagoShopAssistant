@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, Column, String, Float, JSON, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from data.database.entities import Customer, Staff, Product
-from data.database.orm_entities import ProductModel, StaffModel, CustomerModel, Base
+from tiago.lib.database.entities import Customer, Staff, Product
+from tiago.lib.database.orm_entities import ProductModel, StaffModel, CustomerModel, Base
 
 # Cache System Implementation
 T = TypeVar('T')

@@ -329,7 +329,6 @@ def main(args=None):
     rclpy.init(args=args)
     package_share = get_package_share_directory('tiago')
     resource_path = os.path.join(package_share, 'res', 'map.png')
-    print("Map path:", resource_path)
     # Create the node
     map_service_node = MapProviderNode(
         map_file_path=resource_path,

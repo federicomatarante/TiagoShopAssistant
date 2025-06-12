@@ -1,10 +1,11 @@
 from typing import Dict, Any, Optional
 
-from data.database.database import Database
-from data.database.entities import Customer, Product, Staff
-from data.geometry import Point2D
-from data.managers import EmbeddingsManager, CustomerManager, ProductRecommender, StaffRecommender
-from data.map import Map
+from tiago.lib.database.entities import Customer, Product, Staff
+from tiago.lib.map.geometry import Point2D
+from tiago.lib.database.managers import EmbeddingsManager, CustomerManager, ProductRecommender, StaffRecommender
+from tiago.lib.map.map import Map
+
+from tiago.lib.database.database import Database
 
 
 class DataInterface:
@@ -46,7 +47,7 @@ class DataInterface:
 
     def get_customer_information(self, customer_id: str, ):
         customer = self.database.get_customer(customer_id) or Customer(customer_id)
-        return customer.to_json()
+        return customer
 
     def update_product_information(self, product_information: Dict[str, Any], product_id: Optional[str] = None):
         """
@@ -62,12 +63,9 @@ class DataInterface:
             - 'description': Description of the product (str)
             - 'category': Category of the product (str)
         """
-        product = None
-        existing = True
-        if product_id:
-            product = self.database.get_product(product_id)
-            if not product:
-                raise ValueError(f"Product with ID {product_id} not found in the database.")
+        product = self.database.get_product(product_id)
+        if product:
+            existing = True
         else:
             existing = False
             product_id = self.database.get_new_product_id
@@ -132,14 +130,11 @@ class DataInterface:
             - 'categories': List of categories the staff specializes in (List[str])
             - 'role': Role of the staff member (str)
         """
-        if staff_id:
+        staff = self.database.get_staff(staff_id)
+        if staff:
             existing = True
-            staff = self.database.get_staff(staff_id)
-            if not staff:
-                raise ValueError(f"Staff with ID {staff_id} not found in the database.")
         else:
             existing = False
-            staff_id = self.database.get_new_staff_id()
             staff = Staff(staff_id=staff_id)
 
         if 'name' in staff_information:
@@ -185,12 +180,11 @@ class DataInterface:
                     areas.append(area[0])
                 else:
                     areas.append("Unknown")
-            answer = [product.to_json() | {'location': areas[i]} for i, product in
-                      enumerate(products)]
+            areas = [areas[i] for i, product in
+                     enumerate(products)]  # TODO this
+            return products, areas
         else:
-            answer = [product.to_json() for product in products]
-
-        return answer
+            return products, None
 
     def extract_relevant_staff(self, staff_query):
         staff = None
@@ -211,9 +205,9 @@ class DataInterface:
                         areas.append(area[0])
                     else:
                         areas.append("Unknown")
-                answer = [staff_member.to_json() | {'location': areas[i]} for
-                          i, staff_member in
-                          enumerate(staff)]
+                areas = [areas[i] for
+                         i, staff_member in
+                         enumerate(staff)]
+                return staff, areas
             else:
-                answer = [staff_member.to_json() for staff_member in staff]
-        return answer
+                return staff, None

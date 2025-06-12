@@ -6,13 +6,75 @@
 # Each entry should be a string in the format "package_name executable_name".
 
 DEFAULT_NODES=(
-    "tiago database"
-    "tiago database_tester"
     "tiago map_provider"
+    "tiago map_tester"
+    "tiago database_interface"
+    "tiago test_database_node"
 )
+
+# === Tmux Configuration ===
+SESSION_NAME="ros2_nodes"
+USE_TMUX=true  # Set to false to use the old background process method
+
 # =================================================
 
 # --- Script Logic ---
+
+# Function to display help
+show_help() {
+    echo "Usage: $0 [OPTIONS] [package1/executable1] [package2/executable2] ..."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help          Show this help message"
+    echo "  --no-tmux          Run nodes as background processes instead of tmux"
+    echo "  --tmux             Force tmux mode (default)"
+    echo "  --session NAME     Use custom tmux session name (default: $SESSION_NAME)"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Run default nodes in tmux"
+    echo "  $0 --no-tmux                # Run default nodes as background processes"
+    echo "  $0 tiago/database            # Run specific node in tmux"
+    echo "  $0 --session my_session tiago/database tiago/map_provider"
+    echo ""
+    echo "Default nodes configured:"
+    for node in "${DEFAULT_NODES[@]}"; do
+        echo "  - $node"
+    done
+}
+
+# Parse command line arguments
+NODES_FROM_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --no-tmux)
+            USE_TMUX=false
+            shift
+            ;;
+        --tmux)
+            USE_TMUX=true
+            shift
+            ;;
+        --session)
+            SESSION_NAME="$2"
+            shift 2
+            ;;
+        *)
+            NODES_FROM_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Check if tmux is available when needed
+if [ "$USE_TMUX" = true ] && ! command -v tmux &> /dev/null; then
+    echo "Warning: tmux is not installed. Falling back to background process mode."
+    echo "To install tmux: sudo apt-get install tmux"
+    USE_TMUX=false
+fi
 
 # Assuming this script is in the workspace root, or it's run from there.
 WORKSPACE_ROOT=$(pwd)
@@ -21,13 +83,10 @@ WORKSPACE_ROOT=$(pwd)
 if [ ! -d "$WORKSPACE_ROOT/src" ] || [ ! -d "$WORKSPACE_ROOT/install" ] && [ ! -d "$WORKSPACE_ROOT/build" ]; then
     echo "Warning: This script should ideally be run from the root of your ROS 2 workspace."
     echo "Attempting to continue, but paths might be incorrect if not in workspace root."
-    # For a stricter check, you could exit here:
-    # echo "Error: Please run this script from the root of your ROS 2 workspace."
-    # exit 1
 fi
 
 echo "=== 1. Building all packages in workspace: $WORKSPACE_ROOT ==="
-cd "$WORKSPACE_ROOT" || exit 1 # Navigate to workspace root or exit if it fails
+cd "$WORKSPACE_ROOT" || exit 1
 
 if colcon build --symlink-install --event-handlers console_direct+; then
     echo "=== Build successful ==="
@@ -45,45 +104,9 @@ else
     exit 1
 fi
 
-# Array to hold PIDs of background processes
-declare -a PIDS=()
-declare -a NODE_DESCRIPTIONS=() # For better shutdown messages
-
-# Function to kill all background processes
-cleanup() {
-    echo -e "\n\n=== Shutting down nodes... ==="
-    if [ ${#PIDS[@]} -eq 0 ]; then
-        echo "No nodes were recorded to shut down."
-    else
-        for i in "${!PIDS[@]}"; do
-            PID=${PIDS[$i]}
-            DESC=${NODE_DESCRIPTIONS[$i]}
-            if ps -p "$PID" > /dev/null; then # Check if process exists
-                echo "Stopping $DESC (PID $PID)..."
-                kill "$PID" # Send SIGTERM
-            else
-                echo "$DESC (PID $PID) was already stopped."
-            fi
-        done
-
-        # Wait for processes to terminate
-        # You can add a timeout here if needed
-        for PID in "${PIDS[@]}"; do
-            if ps -p "$PID" > /dev/null; then
-                wait "$PID" 2>/dev/null # Wait for specific PID, ignore "No such process" if already killed
-            fi
-        done
-    fi
-    echo "=== Shutdown complete. ==="
-    exit 0 # Exit cleanly
-}
-
-# Trap SIGINT (Ctrl+C) and SIGTERM (system shutdown) and call cleanup
-trap cleanup SIGINT SIGTERM
-
 # Determine which nodes to run
-NODES_TO_LAUNCH_SPECS=() # Will store "package_name executable_name" strings
-if [ "$#" -eq 0 ]; then
+NODES_TO_LAUNCH_SPECS=()
+if [ ${#NODES_FROM_ARGS[@]} -eq 0 ]; then
     echo ""
     echo "--- No specific nodes provided on command line, running default set configured in script. ---"
     if [ ${#DEFAULT_NODES[@]} -eq 0 ]; then
@@ -94,10 +117,8 @@ if [ "$#" -eq 0 ]; then
 else
     echo ""
     echo "--- Running nodes specified on command line. ---"
-    # Each argument is expected as "package_name/executable_name"
-    for arg_node_spec in "$@"; do
+    for arg_node_spec in "${NODES_FROM_ARGS[@]}"; do
         package_name=$(echo "$arg_node_spec" | cut -d'/' -f1)
-        # Use sed to robustly get the part after the first '/'
         executable_name=$(echo "$arg_node_spec" | sed 's|^[^/]*/||')
 
         if [ "$package_name" == "$arg_node_spec" ] || [ -z "$executable_name" ] || [ "$package_name" == "$executable_name" ]; then
@@ -113,41 +134,161 @@ else
     fi
 fi
 
-echo ""
-echo "=== 3. Starting ROS 2 Nodes ==="
-for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
-    # Split the string "package_name executable_name" into two variables
-    read -r current_package_name current_executable_name <<< "$node_info_str"
+# === TMUX MODE ===
+if [ "$USE_TMUX" = true ]; then
+    echo ""
+    echo "=== 3. Starting ROS 2 Nodes in Tmux Session: $SESSION_NAME ==="
 
-    if [ -z "$current_package_name" ] || [ -z "$current_executable_name" ]; then
-        echo "Warning: Skipping invalid or empty node entry '$node_info_str'."
-        continue
+    # Kill existing session if it exists
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        echo "Killing existing tmux session '$SESSION_NAME'..."
+        tmux kill-session -t "$SESSION_NAME"
     fi
 
-    node_description="'$current_executable_name' from package '$current_package_name'"
-    echo "Starting $node_description..."
+    # Create new session with the first node
+    first_node=true
+    window_index=0
 
-    # Run the node in the background
-    # You can redirect output if needed:
-    # ros2 run "$current_package_name" "$current_executable_name" > "${current_executable_name}_${current_package_name}.log" 2>&1 &
-    ros2 run "$current_package_name" "$current_executable_name" &
+    for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
+        read -r current_package_name current_executable_name <<< "$node_info_str"
 
-    PIDS+=($!) # Store PID of the last backgrounded process
-    NODE_DESCRIPTIONS+=("$node_description")
-    sleep 0.5 # Small delay to allow node to potentially print its startup messages
-done
+        if [ -z "$current_package_name" ] || [ -z "$current_executable_name" ]; then
+            echo "Warning: Skipping invalid or empty node entry '$node_info_str'."
+            continue
+        fi
 
-echo ""
-if [ ${#PIDS[@]} -gt 0 ]; then
-    echo "=== All specified nodes launched. Monitoring PIDs: ${PIDS[*]}. ==="
-    echo "Press Ctrl+C to stop all nodes and exit."
-    # Wait for all background processes to complete.
-    # Script will remain here until all background PIDs exit or Ctrl+C is pressed.
-    wait
+        window_name="${current_package_name}_${current_executable_name}"
+
+        if [ "$first_node" = true ]; then
+            # Create the session with the first window
+            echo "Creating tmux session '$SESSION_NAME' with window '$window_name'..."
+            tmux new-session -d -s "$SESSION_NAME" -n "$window_name"
+            first_node=false
+        else
+            # Create additional windows
+            echo "Creating window '$window_name'..."
+            tmux new-window -t "$SESSION_NAME" -n "$window_name"
+        fi
+
+        # Set up the environment and run the node in this window
+        tmux send-keys -t "$SESSION_NAME:$window_name" "cd '$WORKSPACE_ROOT'" Enter
+        tmux send-keys -t "$SESSION_NAME:$window_name" "source install/setup.bash" Enter
+        tmux send-keys -t "$SESSION_NAME:$window_name" "echo 'Starting $current_executable_name from package $current_package_name...'" Enter
+        tmux send-keys -t "$SESSION_NAME:$window_name" "ros2 run $current_package_name $current_executable_name" Enter
+
+        ((window_index++))
+        sleep 0.5
+    done
+
+    if [ "$first_node" = true ]; then
+        echo "--- No valid nodes were processed. ---"
+        exit 0
+    fi
+
+    # Create a control window for monitoring
+    echo "Creating control window..."
+    tmux new-window -t "$SESSION_NAME" -n "control"
+    tmux send-keys -t "$SESSION_NAME:control" "cd '$WORKSPACE_ROOT'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "source install/setup.bash" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo 'ROS2 Nodes Control Panel'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo 'Available commands:'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  ros2 node list    - List all running nodes'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  ros2 topic list   - List all topics'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  htop              - Monitor system resources'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo ''" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo 'Use Ctrl+B then:'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  n - Next window'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  p - Previous window'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  [0-9] - Go to window number'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo '  d - Detach session'" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo ''" Enter
+    tmux send-keys -t "$SESSION_NAME:control" "echo 'To kill all nodes and exit: tmux kill-session -t $SESSION_NAME'" Enter
+
+    # Go to the first node window
+    tmux select-window -t "$SESSION_NAME:0"
+
+    echo ""
+    echo "=== Tmux session '$SESSION_NAME' created successfully! ==="
+    echo ""
+    echo "Tmux Quick Reference:"
+    echo "  - Switch windows: Ctrl+B then n/p (next/previous) or number key"
+    echo "  - Detach session: Ctrl+B then d"
+    echo "  - Reattach later: tmux attach -t $SESSION_NAME"
+    echo "  - Kill session: tmux kill-session -t $SESSION_NAME"
+    echo ""
+    echo "Attaching to session now..."
+    sleep 2
+
+    # Attach to the session
+    tmux attach-session -t "$SESSION_NAME"
+
+    echo "Tmux session detached or ended."
+
+# === BACKGROUND PROCESS MODE ===
 else
-    echo "--- No nodes were actually launched. ---"
-fi
+    echo ""
+    echo "=== 3. Starting ROS 2 Nodes as Background Processes ==="
 
-# If 'wait' returns because all nodes exited by themselves (not via Ctrl+C)
-# call cleanup to ensure a consistent exit message.
-cleanup
+    # Array to hold PIDs of background processes
+    declare -a PIDS=()
+    declare -a NODE_DESCRIPTIONS=()
+
+    # Function to kill all background processes
+    cleanup() {
+        echo -e "\n\n=== Shutting down nodes... ==="
+        if [ ${#PIDS[@]} -eq 0 ]; then
+            echo "No nodes were recorded to shut down."
+        else
+            for i in "${!PIDS[@]}"; do
+                PID=${PIDS[$i]}
+                DESC=${NODE_DESCRIPTIONS[$i]}
+                if ps -p "$PID" > /dev/null; then
+                    echo "Stopping $DESC (PID $PID)..."
+                    kill "$PID"
+                else
+                    echo "$DESC (PID $PID) was already stopped."
+                fi
+            done
+
+            for PID in "${PIDS[@]}"; do
+                if ps -p "$PID" > /dev/null; then
+                    wait "$PID" 2>/dev/null
+                fi
+            done
+        fi
+        echo "=== Shutdown complete. ==="
+        exit 0
+    }
+
+    # Trap SIGINT (Ctrl+C) and SIGTERM (system shutdown) and call cleanup
+    trap cleanup SIGINT SIGTERM
+
+    for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
+        read -r current_package_name current_executable_name <<< "$node_info_str"
+
+        if [ -z "$current_package_name" ] || [ -z "$current_executable_name" ]; then
+            echo "Warning: Skipping invalid or empty node entry '$node_info_str'."
+            continue
+        fi
+
+        node_description="'$current_executable_name' from package '$current_package_name'"
+        echo "Starting $node_description..."
+
+        ros2 run "$current_package_name" "$current_executable_name" &
+
+        PIDS+=($!)
+        NODE_DESCRIPTIONS+=("$node_description")
+        sleep 0.5
+    done
+
+    echo ""
+    if [ ${#PIDS[@]} -gt 0 ]; then
+        echo "=== All specified nodes launched. Monitoring PIDs: ${PIDS[*]}. ==="
+        echo "Press Ctrl+C to stop all nodes and exit."
+        wait
+    else
+        echo "--- No nodes were actually launched. ---"
+    fi
+
+    cleanup
+fi

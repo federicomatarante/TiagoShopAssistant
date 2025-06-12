@@ -1,0 +1,4 @@
+# Service to update a product's information.
+tiago/Product product
+---
+bool success
