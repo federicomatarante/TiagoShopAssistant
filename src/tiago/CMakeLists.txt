@@ -78,6 +78,12 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME vision_controller
 )
+install(PROGRAMS
+  ${PROJECT_NAME}/path_planner.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME path_planner
+)
+
 
 
 # Install launch files if they exist
