@@ -53,16 +53,16 @@ install(
 )
 # Install Python executables
 
-install(PROGRAMS
-  ${PROJECT_NAME}/map_provider.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME map_provider
-)
-install(PROGRAMS
-  ${PROJECT_NAME}/map_tester.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME map_tester
-)
+# install(PROGRAMS
+#   ${PROJECT_NAME}/map_provider.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME map_provider
+# )
+# install(PROGRAMS
+#   ${PROJECT_NAME}/map_tester.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME map_tester
+# )
 # Install the maps directory to the share folder
 install(
   DIRECTORY tiago/maps/
@@ -73,15 +73,20 @@ install(
   DIRECTORY tiago/rviz/
   DESTINATION share/${PROJECT_NAME}/rviz
 )
+# install(PROGRAMS
+#   ${PROJECT_NAME}/database_interface.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME database_interface
+# )
+# install(PROGRAMS
+#   ${PROJECT_NAME}/test_database_node.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME test_database_node
+# )
 install(PROGRAMS
-  ${PROJECT_NAME}/database_interface.py
+  ${PROJECT_NAME}/vision_controller.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME database_interface
-)
-install(PROGRAMS
-  ${PROJECT_NAME}/test_database_node.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME test_database_node
+  RENAME vision_controller
 )
 install(PROGRAMS
   ${PROJECT_NAME}/path_planner.py

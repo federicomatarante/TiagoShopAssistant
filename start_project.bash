@@ -12,7 +12,6 @@ DEFAULT_NODES=(
     "tiago test_database_node"
     "tiago path_planner"
     "tiago vision_controller"
->>>>>>> 166161d31db06fface3280c48dfb2a9aadfb25a0
 )
 
 # === Tmux Configuration ===
