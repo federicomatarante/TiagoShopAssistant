@@ -1,0 +1,53 @@
+<!-- ~/TiagoShopAssistant/src/tiago/tiago/worlds/my_shop.world -->
+<sdf version='1.7'>
+  <world name='my_shop'>
+    <scene>
+      <ambient>0.8 0.8 0.8 1.0</ambient>
+      <background>0.7 0.7 0.7 1.0</background>
+      <shadows>true</shadows>
+    </scene>
+    <include><uri>model://sun</uri></include>
+    <include><uri>model://ground_plane</uri></include>
+
+    <!-- Muri perimetrali (un rettangolo di 10x15 metri) -->
+    <model name='walls'>
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose>
+      <link name='link'>
+        <collision name='wall_north'><pose>0 7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name='visual_north'><pose>0 7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></visual>
+        <collision name='wall_south'><pose>0 -7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name='visual_south'><pose>0 -7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></visual>
+        <collision name='wall_east'><pose>5 0 1.25 0 0 0</pose><geometry><box><size>0.2 15 2.5</size></box></geometry></collision>
+        <visual name='visual_east'><pose>5 0 1.25 0 0 0</pose><geometry><box><size>0.2 15 2.5</size></box></geometry></visual>
+        <!-- Muro Ovest con apertura (entrata/uscita) -->
+        <collision name='wall_west_1'><pose>-5 4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></collision>
+        <visual name='visual_west_1'><pose>-5 4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></visual>
+        <collision name='wall_west_2'><pose>-5 -4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></collision>
+        <visual name='visual_west_2'><pose>-5 -4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <!-- Includi e posiziona i modelli che abbiamo creato -->
+    <include>
+      <name>shelf_1</name>
+      <uri>file://models/shelf.sdf</uri>
+      <pose>2 3 0 0 0 1.57</pose>
+    </include>
+    <include>
+      <name>shelf_2</name>
+      <uri>file://models/shelf.sdf</uri>
+      <pose>2 -2 0 0 0 1.57</pose>
+    </include>
+    <include>
+      <name>shelf_3</name>
+      <uri>file://models/shelf.sdf</uri>
+      <pose>-2 0 0 0 0 0</pose>
+    </include>
+    <include>
+      <name>cash_desk_1</name>
+      <uri>file://models/cash_desk.sdf</uri>
+      <pose>4 6 0 0 0 0.78</pose>
+    </include>
+  </world>
+</sdf>

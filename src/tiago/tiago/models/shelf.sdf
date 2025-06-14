@@ -1,0 +1,31 @@
+<!-- ~/TiagoShopAssistant/src/tiago/tiago/models/shelf.sdf -->
+<sdf version='1.7'>
+  <model name='simple_shelf'>
+    <static>true</static>
+    <link name='link'>
+      <!-- Base dello scaffale -->
+      <visual name='visual_base'>
+        <geometry><box><size>1.2 0.4 0.1</size></box></geometry>
+        <material><ambient>0.5 0.5 0.5 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+      </visual>
+      <collision name='collision_base'>
+        <geometry><box><size>1.2 0.4 0.1</size></box></geometry>
+      </collision>
+      <!-- Ripiano superiore -->
+      <visual name='visual_top'>
+        <pose>0 0 0.8 0 0 0</pose>
+        <geometry><box><size>1.2 0.4 0.1</size></box></geometry>
+        <material><ambient>0.5 0.5 0.5 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+      </visual>
+      <collision name='collision_top'>
+        <pose>0 0 0.8 0 0 0</pose>
+        <geometry><box><size>1.2 0.4 0.1</size></box></geometry>
+      </collision>
+      <!-- Gambe di supporto (invisibili per semplicità, ma con collisione) -->
+      <collision name='leg1'><pose>0.55 0.15 0.45 0 0 0</pose><geometry><box><size>0.1 0.1 0.8</size></box></geometry></collision>
+      <collision name='leg2'><pose>-0.55 0.15 0.45 0 0 0</pose><geometry><box><size>0.1 0.1 0.8</size></box></geometry></collision>
+      <collision name='leg3'><pose>0.55 -0.15 0.45 0 0 0</pose><geometry><box><size>0.1 0.1 0.8</size></box></geometry></collision>
+      <collision name='leg4'><pose>-0.55 -0.15 0.45 0 0 0</pose><geometry><box><size>0.1 0.1 0.8</size></box></geometry></collision>
+    </link>
+  </model>
+</sdf>
