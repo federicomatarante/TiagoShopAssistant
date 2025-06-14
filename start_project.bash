@@ -106,17 +106,6 @@ else
     exit 1
 fi
 
-echo "=== 2a. Exporting Gazebo model path ==="
-# La cartella 'models' si trova dentro 'tiago/tiago', quindi aggiungiamo quella directory al path
-TIAGO_MODEL_PATH="$WORKSPACE_ROOT/src/tiago/tiago"
-
-if [ -d "$TIAGO_MODEL_PATH" ]; then
-    export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:$TIAGO_MODEL_PATH
-    echo "--> Custom model path added: $TIAGO_MODEL_PATH"
-else
-    echo "Warning: Custom model path not found at $TIAGO_MODEL_PATH"
-fi
-
 # Determine which nodes to run
 NODES_TO_LAUNCH_SPECS=()
 if [ ${#NODES_FROM_ARGS[@]} -eq 0 ]; then

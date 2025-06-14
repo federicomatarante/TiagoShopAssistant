@@ -73,6 +73,14 @@ install(
   DIRECTORY tiago/rviz/
   DESTINATION share/${PROJECT_NAME}/rviz
 )
+install(
+  DIRECTORY tiago/models/
+  DESTINATION share/${PROJECT_NAME}/models
+)
+install(
+  DIRECTORY tiago/worlds/
+  DESTINATION share/${PROJECT_NAME}/worlds
+)
 # install(PROGRAMS
 #   ${PROJECT_NAME}/database_interface.py
 #   DESTINATION lib/${PROJECT_NAME}
