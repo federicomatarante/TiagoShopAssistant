@@ -9,6 +9,31 @@
     <include><uri>model://sun</uri></include>
     <include><uri>model://ground_plane</uri></include>
 
+    <model name='green_rectangle'>
+      <static>true</static>
+      <pose>-4.5 3 0 0 0 0</pose> <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <box>
+              <size>1 1 3</size> </box>
+          </geometry>
+          <material>
+            <ambient>0 1 0 1</ambient>
+            <diffuse>0 1 0 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 0</emissive>
+          </material>
+        </visual>
+        <collision name='collision'>
+          <geometry>
+            <box>
+              <size>1 1 3</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+
     <!-- Muri perimetrali (un rettangolo di 10x15 metri) -->
     <model name='walls'>
       <static>true</static>
@@ -29,25 +54,100 @@
     </model>
 
     <!-- Includi e posiziona i modelli che abbiamo creato -->
+<include>
+      <name>shelf_S1</name>
+      <uri>model://shelf</uri>
+      <pose>-3 -7.35 0.5 0 0 0</pose> <scale>1.5 1 1</scale>
+    </include>
+
     <include>
-      <name>shelf_1</name>
-      <uri>file://models/shelf.sdf</uri>
-      <pose>2 3 0 0 0 1.57</pose>
+      <name>shelf_S2</name>
+      <uri>model://shelf</uri>
+      <pose>0 -7.35 0.5 0 0 0</pose> <scale>1.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_S3</name>
+      <uri>model://shelf</uri>
+      <pose>3 -7.35 0.5 0 0 0</pose> <scale>1.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>cash_desk_main</name>
+      <uri>model://cash_desk</uri>
+      <pose>-4.7 -3.5 0 0 0 1.57</pose> <scale>11 11 11</scale>
+      </include>
+
+    <include>
+      <name>shelf_N1</name>
+      <uri>model://shelf</uri>
+      <pose>-3 7.35 0.5 0 0 0</pose> <scale>1.5 1 1</scale>
     </include>
     <include>
-      <name>shelf_2</name>
-      <uri>file://models/shelf.sdf</uri>
-      <pose>2 -2 0 0 0 1.57</pose>
+      <name>shelf_N2</name>
+      <uri>model://shelf</uri>
+      <pose>0 7.35 0.5  0 0</pose>
+      <scale>1.5 1 1</scale>
     </include>
     <include>
-      <name>shelf_3</name>
-      <uri>file://models/shelf.sdf</uri>
-      <pose>-2 0 0 0 0 0</pose>
+      <name>shelf_N3</name>
+      <uri>model://shelf</uri>
+      <pose>3 7.35 0.5 0 0 3.14</pose>
+      <scale>1.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_E1</name>
+      <uri>model://shelf</uri>
+      <pose>4.85 5 0.5 0 0 1.57</pose> <scale>1.5 1 1</scale>
     </include>
     <include>
-      <name>cash_desk_1</name>
-      <uri>file://models/cash_desk.sdf</uri>
-      <pose>4 6 0 0 0 0.78</pose>
+      <name>shelf_E2</name>
+      <uri>model://shelf</uri>
+      <pose>4.85 0 0.5 0 0 1.57</pose>
+      <scale>1.5 1 1</scale>
+    </include>
+    <include>
+      <name>shelf_E3</name>
+      <uri>model://shelf</uri>
+      <pose>4.85 -5 0.5 0 0 1.57</pose>
+      <scale>1.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_W1</name>
+      <uri>model://shelf</uri>
+      <pose>-4.85 6 0.5 0 0 -1.57</pose> <scale>1.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_Mid_sx1</name>
+      <uri>model://shelf</uri>
+      <pose>1 -3 0.5 0 0 0</pose> <scale>3.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_Mid_dx1</name>
+      <uri>model://shelf</uri>
+      <pose>1 3 0.5 0 0 0</pose> <scale>3.5 1 1</scale>
+    </include>
+
+        <include>
+      <name>shelf_Mid_sx2</name>
+      <uri>model://shelf</uri>
+      <pose>-1 -3 0.5 0 0 0</pose> <scale>3.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>shelf_Mid_dx2</name>
+      <uri>model://shelf</uri>
+      <pose>-1 3 0.5 0 0 0</pose> <scale>3.5 1 1</scale>
+    </include>
+
+    <include>
+      <name>tiago_robot</name>
+      <uri>model://tiago_robot</uri>
+      <pose>0 0 0 0 0 0</pose>
     </include>
   </world>
 </sdf>

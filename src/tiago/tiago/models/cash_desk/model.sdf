@@ -5,11 +5,11 @@
     <link name='link'>
       <pose>0 0 0.4 0 0 0</pose>
       <visual name='visual'>
-        <geometry><box><size>1.0 0.6 0.8</size></box></geometry>
+        <geometry><box><size>2.0 0.6 0.8</size></box></geometry>
         <material><ambient>0.2 0.2 0.8 1</ambient><diffuse>0.3 0.3 0.9 1</diffuse></material>
       </visual>
       <collision name='collision'>
-        <geometry><box><size>1.0 0.6 0.8</size></box></geometry>
+        <geometry><box><size>2.0 0.6 0.8</size></box></geometry>
       </collision>
     </link>
   </model>

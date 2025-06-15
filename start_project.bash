@@ -164,10 +164,10 @@ if [ "$USE_TMUX" = true ]; then
     echo "--> Map Server is active."
 
     # 3. Start RViz in its own dedicated window.
-    echo "--> Starting RViz..."
-    tmux new-window -t "$SESSION_NAME" -n "rviz"
-    tmux send-keys -t "$SESSION_NAME:rviz" "source install/setup.bash" Enter
-    tmux send-keys -t "$SESSION_NAME:rviz" "ros2 run rviz2 rviz2 -d \$(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz" Enter
+    # echo "--> Starting RViz..."
+    # tmux new-window -t "$SESSION_NAME" -n "rviz"
+    # tmux send-keys -t "$SESSION_NAME:rviz" "source install/setup.bash" Enter
+    # tmux send-keys -t "$SESSION_NAME:rviz" "ros2 run rviz2 rviz2 -d \$(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz" Enter
 
     # 4. Now, loop through the user's default nodes and add them as NEW windows.
     for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
@@ -283,10 +283,10 @@ else
     echo "--> Map Server is active."
 
     # 2. Start RViz.
-    echo "--> Starting RViz..."
-    ros2 run rviz2 rviz2 -d $(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz &
-    PIDS+=($!)
-    NODE_DESCRIPTIONS+=("RViz")
+    # echo "--> Starting RViz..."
+    # ros2 run rviz2 rviz2 -d $(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz &
+    # PIDS+=($!)
+    # NODE_DESCRIPTIONS+=("RViz")
 
     # <<<<<<<<<<<<<<<< END OF MODIFIED BACKGROUND LOGIC <<<<<<<<<<<<<<<<
 
