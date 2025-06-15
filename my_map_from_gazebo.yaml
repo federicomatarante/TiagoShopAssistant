@@ -1,4 +1,4 @@
-image: my_map.pgm
+image: my_map_from_gazebo.pgm
 mode: trinary
 resolution: 0.05
 origin: [-5, -5, 0]
