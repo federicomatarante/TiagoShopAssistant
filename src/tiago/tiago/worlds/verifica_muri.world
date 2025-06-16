@@ -1,0 +1,29 @@
+<sdf version='1.6'>
+  <world name='test_solo_muri'>
+    <scene>
+      <background>0.2 0.2 0.2 1</background>
+      <grid>true</grid>
+    </scene>
+    <include><uri>model://sun</uri></include>
+
+    <!-- Muri perimetrali (un rettangolo di 10x15 metri) -->
+    <model name='walls'>
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose>
+      <link name='link'>
+        <collision name='wall_north'><pose>0 7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name='visual_north'><pose>0 7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></visual>
+        <collision name='wall_south'><pose>0 -7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name='visual_south'><pose>0 -7.5 1.25 0 0 0</pose><geometry><box><size>10 0.2 2.5</size></box></geometry></visual>
+        <collision name='wall_east'><pose>5 0 1.25 0 0 0</pose><geometry><box><size>0.2 15 2.5</size></box></geometry></collision>
+        <visual name='visual_east'><pose>5 0 1.25 0 0 0</pose><geometry><box><size>0.2 15 2.5</size></box></geometry></visual>
+        <!-- Muro Ovest con apertura (entrata/uscita) -->
+        <collision name='wall_west_1'><pose>-5 4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></collision>
+        <visual name='visual_west_1'><pose>-5 4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></visual>
+        <collision name='wall_west_2'><pose>-5 -4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></collision>
+        <visual name='visual_west_2'><pose>-5 -4.5 1.25 0 0 0</pose><geometry><box><size>0.2 6 2.5</size></box></geometry></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

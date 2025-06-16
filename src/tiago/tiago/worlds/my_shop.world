@@ -1,13 +1,15 @@
-<!-- ~/TiagoShopAssistant/src/tiago/tiago/worlds/my_shop.world -->
+<?xml version="1.0" ?>
 <sdf version='1.7'>
   <world name='my_shop'>
-    <scene>
-      <ambient>0.8 0.8 0.8 1.0</ambient>
-      <background>0.7 0.7 0.7 1.0</background>
-      <shadows>true</shadows>
+     <scene>
+      <background>0.2 0.2 0.2 1</background>
+      <grid>true</grid>
     </scene>
+
+    <!-- We still need a light source so the tops of the models are visible -->
     <include><uri>model://sun</uri></include>
     <include><uri>model://ground_plane</uri></include>
+   
 
     <model name='green_rectangle'>
       <static>true</static>
@@ -86,7 +88,7 @@
     <include>
       <name>shelf_N2</name>
       <uri>model://shelf</uri>
-      <pose>0 7.35 0.5  0 0</pose>
+      <pose>0 7.35 0.5 0 0 0</pose>
       <scale>1.5 1 1</scale>
     </include>
     <include>
