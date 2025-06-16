@@ -153,7 +153,7 @@ class VisionController(Node):
                     face_image = cv_image
 
                 # Face detection and recognition
-                if face_iamge is not None and self.face_cascade is not None:
+                if face_image is not None and self.face_cascade is not None:
                     gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
                     faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
 
@@ -178,7 +178,7 @@ class VisionController(Node):
                     self.result_publisher.publish(result_msg)
             else:
                 # No person detected - publish status occasionally
-                self.get_logger().info(f'No persons detected, image shape: {tiago_image.shape}', 
+                self.get_logger().info(f'No persons detected, image shape: {cv_image.shape}', 
                                      throttle_duration_sec=10.0)
         except Exception as e:
             self.get_logger().error(f'Error processing image: {e}')
