@@ -4,6 +4,11 @@
     <static>true</static>
     <link name='link'>
       <visual name='visual'>
+        <material>
+          <script>
+            <name>StaffMaterial</name>
+          </script>
+        </material>
         <geometry>
           <mesh>
             <uri>model://staff/meshes/staff.dae</uri>

@@ -1,0 +1,13 @@
+material StaffMaterial
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture material_0_baseColor.png
+      }
+    }
+  }
+}
