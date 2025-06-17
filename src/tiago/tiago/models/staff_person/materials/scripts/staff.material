@@ -1,0 +1,14 @@
+material StaffTag
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture tag_1.png
+        filtering trilinear
+      }
+    }
+  }
+}

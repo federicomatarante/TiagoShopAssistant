@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.5">
-  <model name="person_standing">
+  <model name="staff_person">
     <link name="link">
       <inertial>
         <pose>0 -0.1 0.95 0 0 0</pose>
@@ -42,5 +42,44 @@
         </geometry>
       </visual>
     </link>
+
+    <!-- STAFF BADGE -->
+    <link name="staff_badge">
+      <pose>0.08 0 1.2 0 0 0</pose>
+      <visual name="badge_visual">
+        <geometry>
+          <box>
+            <size>0.1 0.02 0.1</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <script>
+            <name>Gazebo/White</name>
+          </script>
+        </material>
+      </visual>
+      <visual name="staff_id">
+        <pose>0 0.011 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.08 0.001 0.08</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0 0 1 1</ambient>
+          <diffuse>0 0 1 1</diffuse>
+          <script>
+            <name>Gazebo/Blue</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+
+    <joint name="badge_joint" type="fixed">
+      <parent>link</parent>
+      <child>staff_badge</child>
+    </joint>
   </model>
 </sdf>

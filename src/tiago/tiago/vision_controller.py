@@ -5,6 +5,7 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from cv_bridge import CvBridge
 import json
+import numpy as np
 import cv2
 
 class VisionController(Node):
@@ -79,88 +80,118 @@ class VisionController(Node):
             self.get_logger().error(f'Error during person detection: {e}')
             return []
 
-    # Face detection in person region
-    def detect_faces_in_person(self, image, person_rect):
-        """Detect faces within a person's bounding box"""
-        if self.face_cascade is None:
-            return []
+    # # Face detection in person region
+    # def detect_faces_in_person(self, image, person_rect):
+    #     """Detect faces within a person's bounding box"""
+    #     if self.face_cascade is None:
+    #         return []
 
+    #     try:
+    #         x, y, w, h = person_rect
+    #         person_roi = image[y:y+h, x:x+w]
+    #         gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+            
+    #         faces = self.face_cascade.detectMultiScale(gray_roi, 1.1, 4)
+            
+    #         # Convert face coordinates back to full image coordinates
+    #         adjusted_faces = []
+    #         for (fx, fy, fw, fh) in faces:
+    #             adjusted_faces.append((x + fx, y + fy, fw, fh))
+            
+    #         return adjusted_faces
+    #     except Exception as e:
+    #         self.get_logger().error(f'Error during face detection: {e}')
+    #         return []
+
+    # # TODO: Face recognition placeholder
+    # def recognize_face(self, image, face_rect):
+    #     """Recognize face and return staff info if found"""
+    #     # TODO: Implement actual face recognition with embeddings
+    #     # For now: placeholder logic
+        
+    #     # Extract face region for future embedding comparison
+    #     x, y, w, h = face_rect
+    #     face_roi = image[y:y+h, x:x+w]
+        
+    #     # Placeholder: random staff recognition for demo
+    #     # In real implementation: compare face_roi embedding with staff_database
+        
+    #     return None  # No recognition yet - placeholder
+
+    # Badge color detection method
+    def detect_badge_type(self, image, person_rect):
+        """Detect badge type in person chest area"""
         try:
             x, y, w, h = person_rect
-            person_roi = image[y:y+h, x:x+w]
-            gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+            # Focus on chest area where badge is located
+            chest_y = y + int(h * 0.3)  # Upper 30% of person
+            chest_h = int(h * 0.4)      # Next 40% of person height
+            chest_roi = image[chest_y:chest_y+chest_h, x:x+w]
             
-            faces = self.face_cascade.detectMultiScale(gray_roi, 1.1, 4)
+            # Convert to HSV for better color detection
+            hsv = cv2.cvtColor(chest_roi, cv2.COLOR_BGR2HSV)
             
-            # Convert face coordinates back to full image coordinates
-            adjusted_faces = []
-            for (fx, fy, fw, fh) in faces:
-                adjusted_faces.append((x + fx, y + fy, fw, fh))
+            # Define color ranges for badges
+            # Dark/black badge (staff)
+            lower_dark = np.array([0, 0, 0])
+            upper_dark = np.array([180, 255, 50])
+            dark_mask = cv2.inRange(hsv, lower_dark, upper_dark)
             
-            return adjusted_faces
-        except Exception as e:
-            self.get_logger().error(f'Error during face detection: {e}')
-            return []
-
-    # TODO: Face recognition placeholder
-    def recognize_face(self, image, face_rect):
-        """Recognize face and return staff info if found"""
-        # TODO: Implement actual face recognition with embeddings
-        # For now: placeholder logic
-        
-        # Extract face region for future embedding comparison
-        x, y, w, h = face_rect
-        face_roi = image[y:y+h, x:x+w]
-        
-        # Placeholder: random staff recognition for demo
-        # In real implementation: compare face_roi embedding with staff_database
-        
-        return None  # No recognition yet - placeholder
-
-    # TODO: Person classification pipeline
-    def classify_person(self, image, person_rect):
-        """Complete pipeline: person -> face detection -> face recognition -> classification"""
-        
-        # Step 1: Detect faces in person region
-        faces = self.detect_faces_in_person(image, person_rect)
-        
-        if len(faces) > 0:
-            self.get_logger().info(f'Found {len(faces)} face(s) in person region')
+            # Gray badge (customer)  
+            lower_gray = np.array([0, 0, 50])
+            upper_gray = np.array([180, 30, 200])
+            gray_mask = cv2.inRange(hsv, lower_gray, upper_gray)
             
-            # Step 2: Try face recognition on first detected face
-            face_rect = faces[0]  # Use first face
-            staff_info = self.recognize_face(image, face_rect)
+            dark_pixels = cv2.countNonZero(dark_mask)
+            gray_pixels = cv2.countNonZero(gray_mask)
             
-            if staff_info:
-                # Step 3a: Recognized as staff
-                x, y, w, h = person_rect
-                return {
-                    'person_type': 'staff',
-                    'name': staff_info['name'],
-                    'role': staff_info.get('role', 'Unknown'),
-                    'confidence': staff_info.get('confidence', 0.9),
-                    'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                    'face_detected': True
-                }
+            if dark_pixels > gray_pixels and dark_pixels > 50:
+                return 'staff'
+            elif gray_pixels > 50:
+                return 'customer'
             else:
-                # Step 3b: Face detected but not recognized as staff
-                x, y, w, h = person_rect
-                return {
-                    'person_type': 'customer',
-                    'name': 'Unknown Customer',
-                    'confidence': 0.7,
-                    'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                    'face_detected': True
-                }
-        else:
-            # Step 3c: No face detected - assume customer
-            x, y, w, h = person_rect
+                return 'unknown'
+                
+        except Exception as e:
+            self.get_logger().error(f'Error in badge detection: {e}')
+            return 'unknown'
+
+    # classify_person method - badge detection instead of face detection
+    def classify_person(self, image, person_rect):
+        """Complete pipeline: person -> badge detection -> classification"""
+        
+        # Detect badge type instead of faces
+        badge_type = self.detect_badge_type(image, person_rect)
+        
+        x, y, w, h = person_rect
+        
+        if badge_type == 'staff':
+            # Staff classification based on badge
+            return {
+                'person_type': 'staff',
+                'name': 'Staff Member',  # CHANGED: from face recognition result
+                'role': 'Employee',
+                'confidence': 0.9,       # CHANGED: high confidence for badge detection
+                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'detection_method': 'badge'  # NEW: track detection method
+            }
+        elif badge_type == 'customer':
+            # Customer classification based on badge
             return {
                 'person_type': 'customer',
-                'name': 'Unknown Person',
-                'confidence': 0.5,
+                'name': 'Customer',      # CHANGED: from "Unknown Customer"
+                'confidence': 0.9,       # CHANGED: high confidence for badge detection
                 'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'face_detected': False
+                'detection_method': 'badge'  # NEW: track detection method
+            }
+        else:
+            # Unknown badge/no badge detected
+            return {
+                'person_type': 'unknown',        # CHANGED: from 'customer'
+                'name': 'Unknown Person',
+                'confidence': 0.3,               # CHANGED: low confidence
+                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'detection_method': 'no_badge'   # NEW: track detection method
             }
     
     def timer_callback(self):
