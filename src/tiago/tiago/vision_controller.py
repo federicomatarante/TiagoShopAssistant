@@ -4,6 +4,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from cv_bridge import CvBridge
+import json
 import cv2
 
 class VisionController(Node):
@@ -43,7 +44,7 @@ class VisionController(Node):
         self.person_detector = self.init_person_detector()
 
         # TODO: staff embeddings handling
-        
+
         # Debug timer
         self.timer = self.create_timer(10.0, self.timer_callback)
         
@@ -115,17 +116,6 @@ class VisionController(Node):
         # In real implementation: compare face_roi embedding with staff_database
         
         return None  # No recognition yet - placeholder
-
-    def recognize_staff(self, image):
-        """Recognize staff members from face embeddings"""
-        # TODO: implement face recognition using embeddings
-        # For now return a placeholder
-        if self.face_cascade is None:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
-            if len(faces) > 0:
-                return "Staff member detected"
-        return "Unknown person"
 
     # TODO: Person classification pipeline
     def classify_person(self, image, person_rect):
