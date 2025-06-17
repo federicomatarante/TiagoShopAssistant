@@ -14,7 +14,6 @@
           <izz>2.48</izz>
         </inertia>
       </inertial>
-
       <collision name="bottom">
         <pose>0 -0.1 0.01 0 0 0</pose>
         <geometry>
@@ -23,7 +22,6 @@
           </box>
         </geometry>
       </collision>
-
       <collision name="person">
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
@@ -32,7 +30,6 @@
           </mesh>
         </geometry>
       </collision>
-
       <visual name="visual">
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
@@ -42,10 +39,9 @@
         </geometry>
       </visual>
     </link>
-
     <!-- STAFF BADGE -->
     <link name="staff_badge">
-      <pose>0.08 0 1.2 0 0 0</pose>
+      <pose>0 -0.21 1.2 0 0 3.14159</pose>
       <visual name="badge_visual">
         <geometry>
           <box>
@@ -56,11 +52,12 @@
           <ambient>1 1 1 1</ambient>
           <diffuse>1 1 1 1</diffuse>
           <script>
-            <name>Gazebo/White</name>
+            <n>Gazebo/White</n>
           </script>
         </material>
       </visual>
-      <visual name="staff_id">
+      <!-- AprilTag texture -->
+      <visual name="apriltag">
         <pose>0 0.011 0 0 0 0</pose>
         <geometry>
           <box>
@@ -68,15 +65,13 @@
           </box>
         </geometry>
         <material>
-          <ambient>0 0 1 1</ambient>
-          <diffuse>0 0 1 1</diffuse>
           <script>
-            <name>Gazebo/Blue</name>
+            <uri>model://staff_person/materials/scripts</uri>
+            <name>StaffTag</name>
           </script>
         </material>
       </visual>
     </link>
-
     <joint name="badge_joint" type="fixed">
       <parent>link</parent>
       <child>staff_badge</child>

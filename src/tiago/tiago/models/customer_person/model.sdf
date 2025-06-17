@@ -14,7 +14,6 @@
           <izz>2.48</izz>
         </inertia>
       </inertial>
-
       <collision name="bottom">
         <pose>0 -0.1 0.01 0 0 0</pose>
         <geometry>
@@ -23,7 +22,6 @@
           </box>
         </geometry>
       </collision>
-
       <collision name="person">
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
@@ -32,7 +30,6 @@
           </mesh>
         </geometry>
       </collision>
-
       <visual name="visual">
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
@@ -42,10 +39,9 @@
         </geometry>
       </visual>
     </link>
-
-    <!-- CUSTOMER APRILTAG BADGE (ID 2) -->
+    <!-- CUSTOMER APRILTAG BADGE -->
     <link name="customer_badge">
-      <pose>0.08 0 1.2 0 0 0</pose>
+      <pose>0 -0.21 1.2 0 0 3.14159</pose>
       <visual name="badge_base">
         <geometry>
           <box>
@@ -57,21 +53,22 @@
           <diffuse>1 1 1 1</diffuse>
         </material>
       </visual>
-      <!-- AprilTag ID 2 pattern (different pattern) -->
-      <visual name="tag_pattern">
+      <!-- AprilTag texture -->
+      <visual name="apriltag">
         <pose>0 0.011 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.06 0.001 0.06</size>
+            <size>0.08 0.001 0.08</size>
           </box>
         </geometry>
         <material>
-          <ambient>0.5 0.5 0.5 1</ambient>
-          <diffuse>0.5 0.5 0.5 1</diffuse>
+          <script>
+            <uri>model://customer_person/materials/scripts/customer.material</uri>
+            <n>CustomerTag</n>
+          </script>
         </material>
       </visual>
     </link>
-
     <joint name="badge_joint" type="fixed">
       <parent>link</parent>
       <child>customer_badge</child>
