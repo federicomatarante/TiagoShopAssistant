@@ -12,8 +12,6 @@ class VisionController(Node):
         
         # Initialize CV bridge
         self.bridge = CvBridge()
-        # TODO: do we want to handle parameters as below in a config file?
-        self.simulation_mode = True
         
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
@@ -44,21 +42,6 @@ class VisionController(Node):
         # Person detection
         self.person_detector = self.init_person_detector()
 
-        # Webcam accessed in simulation mode (pc webcam)
-        if self.simulation_mode:
-            try:
-                self.webcam = cv2.VideoCapture(0)
-                if self.webcam.isOpened():
-                    self.get_logger().info('Webcam initialized for simulation mode')
-                else:
-                    self.get_logger().warn('Failed to open webcam')
-                    selfg.webcam = None
-            except Exception as e:
-                self.get_logger().error(f'Error initializing webcam: {e}')
-                self.webcam = None
-        else:
-            self.webcam = None
-
         # TODO: staff embeddings handling
         
         # Debug timer
@@ -81,37 +64,57 @@ class VisionController(Node):
     def detect_persons(self, image):
         """Detect persons in the given image"""
         if self.person_detector is None:
-            return None
+            return []
 
         try:
-            # HOG detection
             (rects, weights) = self.person_detector.detectMultiScale(
                 image, 
                 winStride=(4, 4), 
                 padding=(8, 8), 
                 scale=1.05
             )
-
-            return len(rects) > 0
+            return rects  # CHANGED: return rectangles
         except Exception as e:
             self.get_logger().error(f'Error during person detection: {e}')
-            return False
+            return []
 
-    def capture_webcam_frame(self):
-        """Capture frame from PC webcam"""
-        if self.webcam is None or not self.webcam.isOpened():
-            return None
+    # Face detection in person region
+    def detect_faces_in_person(self, image, person_rect):
+        """Detect faces within a person's bounding box"""
+        if self.face_cascade is None:
+            return []
 
         try:
-            ret, frame = self.webcam.read()
-            if ret:
-                return frame
-            else:
-                self.get_logger().warn('Failed to read frame from webcam')
-                return None
+            x, y, w, h = person_rect
+            person_roi = image[y:y+h, x:x+w]
+            gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+            
+            faces = self.face_cascade.detectMultiScale(gray_roi, 1.1, 4)
+            
+            # Convert face coordinates back to full image coordinates
+            adjusted_faces = []
+            for (fx, fy, fw, fh) in faces:
+                adjusted_faces.append((x + fx, y + fy, fw, fh))
+            
+            return adjusted_faces
         except Exception as e:
-            self.get_logger().error(f'Error capturing webcam frame: {e}')
-            return None
+            self.get_logger().error(f'Error during face detection: {e}')
+            return []
+
+    # TODO: Face recognition placeholder
+    def recognize_face(self, image, face_rect):
+        """Recognize face and return staff info if found"""
+        # TODO: Implement actual face recognition with embeddings
+        # For now: placeholder logic
+        
+        # Extract face region for future embedding comparison
+        x, y, w, h = face_rect
+        face_roi = image[y:y+h, x:x+w]
+        
+        # Placeholder: random staff recognition for demo
+        # In real implementation: compare face_roi embedding with staff_database
+        
+        return None  # No recognition yet - placeholder
 
     def recognize_staff(self, image):
         """Recognize staff members from face embeddings"""
@@ -123,79 +126,98 @@ class VisionController(Node):
             if len(faces) > 0:
                 return "Staff member detected"
         return "Unknown person"
+
+    # TODO: Person classification pipeline
+    def classify_person(self, image, person_rect):
+        """Complete pipeline: person -> face detection -> face recognition -> classification"""
+        
+        # Step 1: Detect faces in person region
+        faces = self.detect_faces_in_person(image, person_rect)
+        
+        if len(faces) > 0:
+            self.get_logger().info(f'Found {len(faces)} face(s) in person region')
+            
+            # Step 2: Try face recognition on first detected face
+            face_rect = faces[0]  # Use first face
+            staff_info = self.recognize_face(image, face_rect)
+            
+            if staff_info:
+                # Step 3a: Recognized as staff
+                x, y, w, h = person_rect
+                return {
+                    'person_type': 'staff',
+                    'name': staff_info['name'],
+                    'role': staff_info.get('role', 'Unknown'),
+                    'confidence': staff_info.get('confidence', 0.9),
+                    'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                    'face_detected': True
+                }
+            else:
+                # Step 3b: Face detected but not recognized as staff
+                x, y, w, h = person_rect
+                return {
+                    'person_type': 'customer',
+                    'name': 'Unknown Customer',
+                    'confidence': 0.7,
+                    'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                    'face_detected': True
+                }
+        else:
+            # Step 3c: No face detected - assume customer
+            x, y, w, h = person_rect
+            return {
+                'person_type': 'customer',
+                'name': 'Unknown Person',
+                'confidence': 0.5,
+                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'face_detected': False
+            }
     
     def timer_callback(self):
         self.get_logger().info("Timer callback - node is alive")
     
     def image_callback(self, msg):
-        """Process incoming camera images"""
+        """Process incoming camera images - Face Recognition Pipeline"""
         try:            
-            # Convert ROS image to OpenCV
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
 
-            # Person detection on tiago's camera
-            people_detected = self.detect_persons(cv_image)
+            # Step 1: Detect persons
+            person_rects = self.detect_persons(cv_image)
 
-            if people_detected:
-                self.get_logger().info('Person detected in TIAGo camera')
+            if len(person_rects) > 0:
+                self.get_logger().info(f'Detected {len(person_rects)} person(s)')
 
-                # Choose image source based on simulation mode
-                if self.simulation_mode:
-                    # Use pc webcam in simulation mode
-                    face_image = self.capture_webcam_frame()
-                    if face_image is not None:
-                        self.get_logger().info('Captured frame from webcam')
-                    else:
-                        self.get_logger().warn('No frame captured from webcam, using TIAGo camera image')
-                        face_image = cv_image
-                else:
-                    # Use TIAGo's camera image in real mode
-                    face_image = cv_image
-
-                # Face detection and recognition
-                if face_image is not None and self.face_cascade is not None:
-                    gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
-                    faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
-
-                    if len(faces) > 0:
-                        # Face recognition
-                        staff_id = self.recognize_staff(face_image)
-
-                        # Publish result
-                        result_msg = String()
-                        result_msg.data = f"Person detected, faces: {len(faces)}, staff: {staff_id}"
-                        self.result_publisher.publish(result_msg)
-                        self.get_logger().info(f'Published: {result_msg.data}')
-                    else:
-                        # Person detected but no faces
-                        result_msg = String()
-                        result_msg.data = "Person detected, but no faces found"
-                        self.result_publisher.publish(result_msg)
-                else:
-                    # Person detected but no face detection available
+                # Step 2-4: Process each person through face pipeline
+                for rect in person_rects:
+                    result = self.classify_person(cv_image, rect)
+                    
+                    # Publish result
                     result_msg = String()
-                    result_msg.data = "Person detected, but face detection not available"
+                    result_msg.data = json.dumps(result)
                     self.result_publisher.publish(result_msg)
+                    
+                    # Log result
+                    person_type = result['person_type']
+                    name = result.get('name', 'Unknown')
+                    face_status = "with face" if result['face_detected'] else "no face"
+                    self.get_logger().info(f'Classified {person_type}: {name} ({face_status})')
+
             else:
-                # No person detected - publish status occasionally
-                self.get_logger().info(f'No persons detected, image shape: {cv_image.shape}', 
-                                     throttle_duration_sec=10.0)
+                self.get_logger().info(f'No persons detected, image shape: {cv_image.shape}')
+
         except Exception as e:
-            self.get_logger().error(f'Error processing image: {e}')
+            self.get_logger().error(f'Error in image callback: {e}')
                         
 
 def main(args=None):
     rclpy.init(args=args)
-    node = VisionController()
+    vision_controller = VisionController()
+    
     try:
-        rclpy.spin(node)
+        rclpy.spin(vision_controller)
     except KeyboardInterrupt:
         pass
     finally:
-        # Cleanup webcam
-        if hasattr(vision_controller, 'webcam') and vision_controller.webcam:
-            vision_controller.webcam.release()
-        
         vision_controller.destroy_node()
         rclpy.shutdown()
 
