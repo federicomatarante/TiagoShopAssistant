@@ -103,14 +103,6 @@ install(PROGRAMS
 )
 
 
-# Install launch files if they exist
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)
-  install(DIRECTORY
-    launch/
-    DESTINATION share/${PROJECT_NAME}/launch
-  )
-endif()
-
 # Install config files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config)
   install(DIRECTORY
