@@ -6,7 +6,7 @@ material StaffTag
     {
       texture_unit
       {
-        texture tag_1.png
+        texture ../textures/tag_1.png
         tex_address_mode clamp
         filtering linear linear none
       }

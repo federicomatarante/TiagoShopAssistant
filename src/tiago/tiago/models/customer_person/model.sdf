@@ -63,8 +63,8 @@
         </geometry>
         <material>
           <script>
-            <uri>model://customer_person/materials/scripts/customer.material</uri>
-            <n>CustomerTag</n>
+            <uri>model://customer_person/materials/scripts</uri>
+            <name>CustomerTag</name>
           </script>
         </material>
       </visual>
