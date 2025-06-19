@@ -7,6 +7,7 @@ from cv_bridge import CvBridge
 import json
 import numpy as np
 import cv2
+import apriltag
 
 class VisionController(Node):
     def __init__(self):
@@ -44,7 +45,16 @@ class VisionController(Node):
         # Person detection
         self.person_detector = self.init_person_detector()
 
-        # TODO: staff embeddings handling
+        # AprilTag detection
+        self.apriltag_detector = apriltag.Detector()
+        
+        # Tag ID mapping
+        self.tag_mapping = {
+            1: {'type': 'staff', 'name': 'Staff Member'},
+            2: {'type': 'customer', 'name': 'Customer'}
+        }
+        
+        self.get_logger().info('AprilTag detector initialized')
 
         # Debug timer
         self.timer = self.create_timer(10.0, self.timer_callback)
@@ -79,6 +89,66 @@ class VisionController(Node):
         except Exception as e:
             self.get_logger().error(f'Error during person detection: {e}')
             return []
+
+    def detect_apriltags(self, image):
+        """Detect AprilTags in the image"""
+        try:
+            # Convert to grayscale for AprilTag detection
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Detect tags
+            tags = self.apriltag_detector.detect(gray)
+            
+            detected_tags = []
+            for tag in tags:
+                # Extract tag information
+                tag_info = {
+                    'id': tag.tag_id,
+                    'center': tag.center,
+                    'corners': tag.corners,
+                    'confidence': tag.decision_margin,
+                    'hamming': tag.hamming
+                }
+                detected_tags.append(tag_info)
+                
+                self.get_logger().debug(f'Detected AprilTag ID: {tag.tag_id}, confidence: {tag.decision_margin:.2f}')
+            
+            return detected_tags
+            
+        except Exception as e:
+            self.get_logger().error(f'Error during AprilTag detection: {e}')
+            return []
+
+    def match_tags_to_persons(self, person_rects, detected_tags):
+        """Match AprilTags to person detections based on proximity"""
+        matches = []
+        
+        for person_rect in person_rects:
+            x, y, w, h = person_rect
+            person_center = (x + w//2, y + h//2)
+            
+            best_tag = None
+            min_distance = float('inf')
+            
+            # Find closest tag to person center
+            for tag in detected_tags:
+                tag_center = tag['center']
+                distance = np.sqrt((person_center[0] - tag_center[0])**2 + 
+                                 (person_center[1] - tag_center[1])**2)
+                
+                # Check if tag is within person bounding box or nearby
+                if (x <= tag_center[0] <= x + w and y <= tag_center[1] <= y + h) or distance < min(w, h):
+                    if distance < min_distance:
+                        min_distance = distance
+                        best_tag = tag
+            
+            matches.append({
+                'person_rect': person_rect,
+                'tag': best_tag,
+                'distance': min_distance if best_tag else None
+            })
+        
+        return matches
 
     # # Face detection in person region
     # def detect_faces_in_person(self, image, person_rect):
@@ -156,61 +226,74 @@ class VisionController(Node):
             self.get_logger().error(f'Error in badge detection: {e}')
             return 'unknown'
 
-    # classify_person method - badge detection instead of face detection
-    def classify_person(self, image, person_rect):
-        """Complete pipeline: person -> badge detection -> classification"""
-        
-        # Detect badge type instead of faces
-        badge_type = self.detect_badge_type(image, person_rect)
+    def classify_person_with_tag(self, image, person_rect, tag_info=None):
+        """Complete pipeline: person -> AprilTag detection -> classification"""
         
         x, y, w, h = person_rect
         
-        if badge_type == 'staff':
-            # Staff classification based on badge
+        if tag_info and tag_info['id'] in self.tag_mapping:
+            # AprilTag detected and recognized
+            tag_data = self.tag_mapping[tag_info['id']]
+            confidence = min(0.95, max(0.5, tag_info['confidence'] / 50.0))  # Normalize confidence
+            
             return {
-                'person_type': 'staff',
-                'name': 'Staff Member',  # CHANGED: from face recognition result
-                'role': 'Employee',
-                'confidence': 0.9,       # CHANGED: high confidence for badge detection
+                'person_type': tag_data['type'],
+                'name': tag_data['name'],
+                'tag_id': tag_info['id'],
+                'confidence': confidence,
                 'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'detection_method': 'badge'  # NEW: track detection method
+                'tag_center': tag_info['center'].tolist(),  # Convert numpy array to list
+                'tag_confidence': tag_info['confidence'],
+                'detection_method': 'apriltag'
             }
-        elif badge_type == 'customer':
-            # Customer classification based on badge
+        elif tag_info:
+            # AprilTag detected but unknown ID
             return {
-                'person_type': 'customer',
-                'name': 'Customer',      # CHANGED: from "Unknown Customer"
-                'confidence': 0.9,       # CHANGED: high confidence for badge detection
+                'person_type': 'unknown',
+                'name': f'Unknown Tag ID {tag_info["id"]}',
+                'tag_id': tag_info['id'],
+                'confidence': 0.8,
                 'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'detection_method': 'badge'  # NEW: track detection method
+                'tag_center': tag_info['center'].tolist(),
+                'detection_method': 'apriltag_unknown'
             }
         else:
-            # Unknown badge/no badge detected
+            # No AprilTag detected
             return {
-                'person_type': 'unknown',        # CHANGED: from 'customer'
-                'name': 'Unknown Person',
-                'confidence': 0.3,               # CHANGED: low confidence
+                'person_type': 'unknown',
+                'name': 'Person without badge',
+                'confidence': 0.3,
                 'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'detection_method': 'no_badge'   # NEW: track detection method
+                'detection_method': 'no_apriltag'
             }
     
     def timer_callback(self):
         self.get_logger().info("Timer callback - node is alive")
     
     def image_callback(self, msg):
-        """Process incoming camera images - Face Recognition Pipeline"""
+        """Process incoming camera images - AprilTag Recognition Pipeline"""
         try:            
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
 
             # Step 1: Detect persons
             person_rects = self.detect_persons(cv_image)
+            
+            # Step 2: Detect AprilTags
+            detected_tags = self.detect_apriltags(cv_image)
 
             if len(person_rects) > 0:
-                self.get_logger().info(f'Detected {len(person_rects)} person(s)')
+                self.get_logger().info(f'Detected {len(person_rects)} person(s) and {len(detected_tags)} AprilTag(s)')
 
-                # Step 2-4: Process each person through face pipeline
-                for rect in person_rects:
-                    result = self.classify_person(cv_image, rect)
+                # Step 3: Match tags to persons
+                matches = self.match_tags_to_persons(person_rects, detected_tags)
+                
+                # Step 4: Classify each person with their matched tag
+                for match in matches:
+                    result = self.classify_person_with_tag(
+                        cv_image, 
+                        match['person_rect'], 
+                        match['tag']
+                    )
                     
                     # Publish result
                     result_msg = String()
@@ -220,11 +303,15 @@ class VisionController(Node):
                     # Log result
                     person_type = result['person_type']
                     name = result.get('name', 'Unknown')
-                    face_status = "with face" if result['face_detected'] else "no face"
-                    self.get_logger().info(f'Classified {person_type}: {name} ({face_status})')
+                    method = result.get('detection_method', 'unknown')
+                    confidence = result.get('confidence', 0.0)
+                    tag_id = result.get('tag_id', 'None')
+                    self.get_logger().info(f'Classified {person_type}: {name} (method: {method}, tag_id: {tag_id}, confidence: {confidence:.2f})')
 
+            elif len(detected_tags) > 0:
+                self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s) - tags without people')
             else:
-                self.get_logger().info(f'No persons detected, image shape: {cv_image.shape}')
+                self.get_logger().debug(f'No persons or tags detected, image shape: {cv_image.shape}')
 
         except Exception as e:
             self.get_logger().error(f'Error in image callback: {e}')
