@@ -101,6 +101,12 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME path_planner
 )
+install(PROGRAMS
+  ${PROJECT_NAME}/controller.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME controller
+)
+
 
 
 # Install config files if they exist

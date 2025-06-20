@@ -27,7 +27,7 @@ class PathPlannerService(Node):
 
         # Declare parameters for planner configuration
         self.declare_parameter('w_heuristic', 100.0)
-        self.declare_parameter('smoothing_points', 50)
+        self.declare_parameter('smoothing_points', 40)
         self.declare_parameter('smoothing_collision_threshold', 0.15)
         self.declare_parameter('map_filename', 'my_map.yaml')
 

@@ -51,7 +51,7 @@ Visualization Manager:
       Value: true
     - Alpha: 0.699999988079071
       Class: rviz_default_plugins/Map
-      Color Scheme: map
+      Color Scheme: raw
       Draw Behind: false
       Enabled: true
       Name: Map
@@ -145,11 +145,6 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/Orbit
       Distance: 104.95179748535156
-      Enable Stereo Rendering:
-        Stereo Eye Separation: 0.05999999865889549
-        Stereo Focal Distance: 1
-        Swap Stereo Eyes: false
-        Value: false
       Focal Point:
         X: 0
         Y: 0
