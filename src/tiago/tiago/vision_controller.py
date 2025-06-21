@@ -15,6 +15,8 @@ class VisionController(Node):
         
         # Initialize CV bridge
         self.bridge = CvBridge()
+
+        self.log_counter = 0
         
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
@@ -123,21 +125,23 @@ class VisionController(Node):
         """Match AprilTags to person detections based on proximity"""
         matches = []
         
-        for person_rect in person_rects:
+        for i, person_rect in enumerate(person_rects):
             x, y, w, h = person_rect
             person_center = (x + w//2, y + h//2)
             
             best_tag = None
             min_distance = float('inf')
             
-            # Find closest tag to person center
             for tag in detected_tags:
                 tag_center = tag['center']
                 distance = np.sqrt((person_center[0] - tag_center[0])**2 + 
-                                 (person_center[1] - tag_center[1])**2)
+                                (person_center[1] - tag_center[1])**2)
                 
-                # Check if tag is within person bounding box or nearby
-                if (x <= tag_center[0] <= x + w and y <= tag_center[1] <= y + h) or distance < min(w, h):
+                expanded_margin = max(w, h) * 0.5
+                within_x = (x - expanded_margin) <= tag_center[0] <= (x + w + expanded_margin)
+                within_y = (y - expanded_margin) <= tag_center[1] <= (y + h + expanded_margin)
+                
+                if (within_x and within_y) or distance < min(w, h):
                     if distance < min_distance:
                         min_distance = distance
                         best_tag = tag
@@ -173,10 +177,10 @@ class VisionController(Node):
     #         self.get_logger().error(f'Error during face detection: {e}')
     #         return []
 
-    # # TODO: Face recognition placeholder
+    # Face recognition placeholder
     # def recognize_face(self, image, face_rect):
     #     """Recognize face and return staff info if found"""
-    #     # TODO: Implement actual face recognition with embeddings
+    #     # Implement actual face recognition with embeddings
     #     # For now: placeholder logic
         
     #     # Extract face region for future embedding comparison
@@ -274,7 +278,11 @@ class VisionController(Node):
         """Process incoming camera images - AprilTag Recognition Pipeline"""
         try:            
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-
+            
+            # Less frequent logging
+            self.log_counter += 1
+            should_log = (self.log_counter % 10 == 0)
+            
             # Step 1: Detect persons
             person_rects = self.detect_persons(cv_image)
             
@@ -282,37 +290,40 @@ class VisionController(Node):
             detected_tags = self.detect_apriltags(cv_image)
 
             if len(person_rects) > 0:
-                self.get_logger().info(f'Detected {len(person_rects)} person(s) and {len(detected_tags)} AprilTag(s)')
+                # Always log detection counts if should_log
+                if should_log:
+                    self.get_logger().info(f'Detected {len(person_rects)} person(s) and {len(detected_tags)} AprilTag(s)')
 
-                # Step 3: Match tags to persons
+                # Step 3: Match tags to persons (ALWAYS)
                 matches = self.match_tags_to_persons(person_rects, detected_tags)
                 
-                # Step 4: Classify each person with their matched tag
+                # Step 4: Classify each person (ALWAYS)
                 for match in matches:
                     result = self.classify_person_with_tag(
-                        cv_image, 
-                        match['person_rect'], 
+                        cv_image,
+                        match['person_rect'],
                         match['tag']
                     )
                     
-                    # Publish result
+                    # Publish result (ALWAYS)
                     result_msg = String()
                     result_msg.data = json.dumps(result)
                     self.result_publisher.publish(result_msg)
                     
-                    # Log result
-                    person_type = result['person_type']
-                    name = result.get('name', 'Unknown')
-                    method = result.get('detection_method', 'unknown')
-                    confidence = result.get('confidence', 0.0)
-                    tag_id = result.get('tag_id', 'None')
-                    self.get_logger().info(f'Classified {person_type}: {name} (method: {method}, tag_id: {tag_id}, confidence: {confidence:.2f})')
+                    # Log result only when should_log
+                    if should_log:
+                        person_type = result['person_type']
+                        name = result.get('name', 'Unknown')
+                        method = result.get('detection_method', 'unknown')
+                        confidence = result.get('confidence', 0.0)
+                        tag_id = result.get('tag_id', 'None')
+                        self.get_logger().info(f'Classified {person_type}: {name} (method: {method}, tag_id: {tag_id}, confidence: {confidence:.2f})')
 
-            elif len(detected_tags) > 0:
-                self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s) - tags without people')
-            else:
-                self.get_logger().debug(f'No persons or tags detected, image shape: {cv_image.shape}')
-
+            elif len(detected_tags) > 0 and should_log:
+                self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s)')
+            elif should_log:
+                self.get_logger().debug(f'No persons or tags detected')
+                
         except Exception as e:
             self.get_logger().error(f'Error in image callback: {e}')
                         
