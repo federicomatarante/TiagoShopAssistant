@@ -17,12 +17,20 @@ class VisionController(Node):
         self.bridge = CvBridge()
 
         self.log_counter = 0
+        self.current_depth_image = None
         
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
             Image,
             '/head_front_camera/rgb/image_raw',
             self.image_callback,
+            10)
+
+        # Subscription to TIAGo's depth camera
+        self.depth_subscription = self.create_subscription(
+            Image,
+            '/head_front_camera/depth/image_raw',
+            self.depth_callback,
             10)
         
         # Publisher for detection results
@@ -74,6 +82,73 @@ class VisionController(Node):
         except Exception as e:
             self.get_logger().error(f'Error initializing person detector: {e}')
             return None
+
+    def depth_callback(self, msg):
+        """Process incoming depth images"""
+        try:
+            # Convert ROS Image message to OpenCV format
+            # Depth images can be in different formats (16UC1, 32FC1)
+            if msg.encoding == '16UC1':
+                # 16-bit unsigned integer (millimeters)
+                depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
+                # Convert to meters
+                depth_image = depth_image.astype(np.float32) / 1000.0
+            elif msg.encoding == '32FC1':
+                # 32-bit float (meters)
+                depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
+            else:
+                self.get_logger().error(f'Unsupported depth image encoding: {msg.encoding}')
+                return
+
+            # Store the depth image for use in RGB processing
+            self.current_depth_image = depth_image
+
+        except Exception as e:
+            self.get_logger().error(f'Error in depth callback: {e}')
+            
+    def get_person_depth(self, person_rect, depth_image):
+        """Extract reliable depth measurement for a detected person"""
+        if depth_image is None:
+            return None
+
+        x, y, w, h = person_rect
+
+        # Define sampling region - focus on person's torso area
+        # Avoid edges where background might leak in
+        margin_x = max(1, w // 6) # 16% margin from left/right edges
+        margin_y = max(1, h // 8) # 12% margin from top/bottom edges
+
+        # Sample region: center torso area
+        sample_x1 = x + margin_x
+        sample_x2 = x + w - margin_x
+        sample_y1 = y + margin_y + h // 4  # Start at 25% height - upper torso
+        sample_y2 = y + h - margin_y - h // 4 # End at 75% height - lower torso
+
+        # Ensure bounds are valid
+        sample_x1 = max(0, min(sample_x1, depth_image.shape[1] - 1))
+        sample_x2 = max(sample_x1 + 1, min(sample_x2, depth_image.shape[1]))
+        sample_y1 = max(0, min(sample_y1, depth_image.shape[0] - 1))
+        sample_y2 = max(sample_y1 + 1, min(sample_y2, depth_image.shape[0]))
+
+        # Extract deth values from the sampling region
+        depth_region = depth_image[sample_y1:sample_y2, sample_x1:sample_x2
+        
+        # Filter out invalid depth values
+        valid_depths = depth_region[
+          (depth_region > 0.1) &  # Minimum 10cm
+          (depth_region < 10.0) &  # Maximum 10m
+          (~np.isnan(depth_region)) &  # Not NaN
+          (~np.isinf(depth_region))   # Not infinite
+        ]
+
+        if len(valid_depths) == 0:
+            return None
+
+        # Use median depth for robustness against outliers
+        person_depth = np.median(valid_depths)
+
+        return float(person_depth) 
+        
 
     def detect_persons(self, image):
         """Detect persons in the given image"""
