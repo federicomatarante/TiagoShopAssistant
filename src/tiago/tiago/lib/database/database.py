@@ -389,4 +389,3 @@ class Database:
         finally:
             session.close()
             self.clear_cache()
-

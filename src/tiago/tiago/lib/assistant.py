@@ -3,21 +3,30 @@ import sys
 from typing import List, Dict, Any, Optional
 from ollama import Client  # Assumes `ollama` Python package is installed
 
-from data.database.database import Database
-from data.interface import DataInterface
-from data.map import Map
+from tiago.lib.database.database import Database
+from tiago.lib.map.map import Map
 
 
 class ShopAssistant:
-    def __init__(self, model: str, customer_id: str, data_interface: DataInterface, window_size=6, debug=False):
+    def __init__(self, model: str, customer_id: str, window_size=6):
         self.customer_id = customer_id
         self.llm = Client()
         self.model = model
-        self.data_interface = data_interface
-        self.customer_information = data_interface.get_customer_information(customer_id)
         self.chat_history: List[Dict[str, str]] = []
         self.window_size = window_size
-        self.debug = debug
+        self.customer_information = {}
+
+    def add_message(self, content: str):
+        self.chat_history.append({'role': 'user', 'content': content})
+
+    def set_customer_information(self, customer_information: Dict[str, Any]):
+        """
+        Set the customer information for the assistant.
+
+        Args:
+            customer_information (Dict[str, Any]): The structured customer information to set.
+        """
+        self.customer_information = customer_information
 
     def answer(self, option: Optional[str] = None) -> str:
         system_instruction = {
@@ -33,6 +42,33 @@ class ShopAssistant:
                                                                                    f"{option}\n" if option else ""
             )
         }
+        response = self.llm.chat(model=self.model, messages=[system_instruction, *self.chat_history])
+        assistant_reply = response['message']['content']
+        self.chat_history.append({'role': 'assistant', 'content': assistant_reply})
+        return assistant_reply
+
+    def answer_with_results(self, results: Dict, option: Optional[str] = None) -> str:
+        """
+        Show the results of the query to the user.
+        :param results: The results of the query to show to the user.
+        Results should be a dictionary with keys 'products' and/or 'staff', each containing a list of relevant items.
+
+        :param option: Optional additional instructions to the assistant.
+        """
+        system_instruction = {
+            "role": "system",
+            "content": (
+                "You are a sports shop assistant. Your task is to extract structured information from user messages.\n"
+                "You do not do physical actions - like walking - you just provide information.\n"
+                "Try to help the user with the following information:\n"
+                f"{json.dumps(results, indent=2)}\n"
+                "If the data is not relevant, do not include it in the answer and try to help the customer in other ways.\n"
+                "Try to not write more than 3 sentences.\n"
+                f"{option}\n" if option else ""
+            )
+        }
+
+        # Printing in stderr
         response = self.llm.chat(model=self.model, messages=[system_instruction, *self.chat_history])
         assistant_reply = response['message']['content']
         self.chat_history.append({'role': 'assistant', 'content': assistant_reply})
@@ -86,41 +122,12 @@ class ShopAssistant:
             model=self.model,
             messages=[system_instruction, {'role': 'user', 'content': json.dumps(self.chat_history, indent=2)}]
         )
-        if self.debug:
-            print("[DEBUG] Summary reply: ", result['message']['content'], file=sys.stderr)
-            print("[DEBUG] Previous customer information: ", self.customer_information, file=sys.stderr)
+
         try:
             parsed = json.loads(result['message']['content'])
-            self.data_interface.update_customer_information(self.customer_id, parsed)
-            self.customer_information = self.data_interface.get_customer_information()
+            return parsed
         except json.JSONDecodeError:
             pass
-        if self.debug:
-            print("[DEBUG] Customer information updated: ", self.customer_information, file=sys.stderr)
-
-    def answer_with_results(self, results, option: Optional[str] = None) -> str:
-        """
-        Show the results of the query to the user.
-        """
-
-        system_instruction = {
-            "role": "system",
-            "content": (
-                "You are a sports shop assistant. Your task is to extract structured information from user messages.\n"
-                "You do not do physical actions - like walking - you just provide information.\n"
-                "Try to help the user with the following information:\n"
-                f"{json.dumps(results, indent=2)}\n"
-                "If the data is not relevant, do not include it in the answer and try to help the customer in other ways.\n"
-                "Try to not write more than 3 sentences.\n"
-                f"{option}\n" if option else ""
-            )
-        }
-
-        # Printing in stderr
-        response = self.llm.chat(model=self.model, messages=[system_instruction, *self.chat_history])
-        assistant_reply = response['message']['content']
-        self.chat_history.append({'role': 'assistant', 'content': assistant_reply})
-        return assistant_reply
 
     def _detect_query(self, system_instruction_content: str) -> Dict[str, any]:
         """
@@ -152,12 +159,18 @@ class ShopAssistant:
         except json.JSONDecodeError:
             return {}
 
-    def detect_conversation_interaction(self) -> dict[str, Any]:
+    def get_conversation_direction(self) -> str:
         """
         Detect the direction of the conversation based on user input.
 
         Returns:
-            str: The detected direction of the conversation.
+            str: The detected direction of the conversation. Possible values are:
+            - product_info: The customer clearly asked for product information.
+            - staff_info: The customer clearly asked for staff information.
+            - walk_to_product: The customer clearly asked to be walked to a product.
+            - walk_to_staff: The customer clearly asked to be walked to a staff member.
+            - finished: It's clear the conversation is ended.
+            - If nothing is relevant, returns an empty string.
         """
         system_instruction_content = (
             "You're a sports shop assistant. Be concise and clear. "
@@ -166,8 +179,6 @@ class ShopAssistant:
             "Possible values are:\n"
             "product_info ( the customer clearly asked for product information),\n"
             "staff_info ( the customer clearly asked for staff information),\n"
-            "product_location ( the customer clearly asked for product location),\n"
-            "staff_location ( the customer clearly asked for staff location),\n"
             "walk_to_product ( the customer clearly asked to be walked to a product. Not if he asks information about a product,he must clearly ask to be walked there!),\n"
             "walk_to_staff ( the customer clearly asked to be walked to a staff member. Not if he asks information about a staff member, he must clearly ask to be walked there! ),\n"
             "finished ( it's clear the conversation is ended ),\n"
@@ -176,7 +187,14 @@ class ShopAssistant:
             "It's really important that you answer only if the user clearly asked for it, do not assume anything.\n"
         )
 
-        return self._detect_query(system_instruction_content)
+        conversation_query = self._detect_query(system_instruction_content)
+        try:
+            if conversation_query and "conversation_direction" in conversation_query:
+                direction = conversation_query["conversation_direction"].rstrip(" ").lstrip(" ")
+                return direction
+        except TypeError | ValueError | KeyError | AttributeError:
+            pass
+        return ""
 
     def detect_products_query(self) -> Dict[str, any]:
         """
@@ -203,7 +221,14 @@ class ShopAssistant:
             "Answer only with the JSON, no extra text!\n"
         )
 
-        return self._detect_query(system_instruction_content)
+        products_query = self._detect_query(system_instruction_content)
+        try:
+            has_product_query = any(value for value in products_query.values())
+        except (TypeError, ValueError, AttributeError):
+            has_product_query = False
+        if has_product_query:
+            return products_query
+        return {}
 
     def detect_staff_query(self) -> Dict[str, any]:
         """
@@ -227,154 +252,10 @@ class ShopAssistant:
             "Answer only with the JSON, no extra text!\n"
         )
 
-        return self._detect_query(system_instruction_content)
-
-    def _extract_results_from_query(self, products_query, staff_query) -> dict[str, Any]:
-        """
-        Extract relevant results from the query.
-
-        Args:
-            query (Dict[str, any]): The structured query to extract results from.
-
-        Returns:
-            List[Dict[str, Any
-            ]]: A list of dictionaries containing the extracted results.
-        """
-        # Checking if there are products or staff queries
-        try:
-            has_product_query = any(value for value in products_query.values())
-        except (TypeError, ValueError, AttributeError):
-            has_product_query = False
+        staff_query = self._detect_query(system_instruction_content)
         try:
             has_staff_query = any(value for value in staff_query.values())
         except (TypeError, ValueError, AttributeError):
             has_staff_query = False
-
-        # Dividing the query into product and staff queries
-        query = {}
-        if has_product_query:
-            query["product_query"] = products_query
         if has_staff_query:
-            query["staff_query"] = staff_query
-
-        # Extracting results based on the query
-        results = {}
-        if "product_query" in query:
-            results['products'] = self.data_interface.extract_relevant_products(query["product_query"])
-
-        if "staff_query" in query:
-            results['staff'] = self.data_interface.extract_relevant_staff(query["staff_query"])
-
-        return results
-
-    def respond(self, user_input: str) -> dict[str, str | None | Any]:
-        self.chat_history.append({'role': 'user', 'content': user_input})
-        conversation_query = self.detect_conversation_interaction()
-
-        direction = None
-        try:
-            if conversation_query and "conversation_direction" in conversation_query:
-                direction = conversation_query["conversation_direction"].rstrip(" ").lstrip(" ")
-        except TypeError | ValueError | KeyError | AttributeError:
-            # If no relevant query is detected, just answer the user
-            pass
-        if self.debug:
-            print("[DEBUG] Conversation direction extracted: ", direction, file=sys.stderr)
-        if direction == "finished":
-            assistant_reply = self.answer(option="Say goodbye to the customer")
-            return {
-                'assistant_reply': assistant_reply,
-                'conversation_direction': direction
-            }
-        products_query = self.detect_products_query()
-        staff_query = self.detect_staff_query()
-        if self.debug:
-            print("[DEBUG] Products query extracted: ", products_query, file=sys.stderr)
-            print("[DEBUG] Staff query extracted: ", staff_query, file=sys.stderr)
-
-        results = self._extract_results_from_query(products_query, staff_query)
-        if self.debug:
-            print("[DEBUG] Results extracted: ", results, file=sys.stderr)
-        has_products = "products" in results
-        has_staff = "staff" in results
-        if direction == "walk_to_product" and has_products:
-            product = results["products"][0] if len(results["products"]) > 0 else None
-            if product:
-                results = {'products': [product, ]}
-                assistant_reply = self.answer_with_results(results,
-                                                           option="Say the customer you're going to walk him to the product")
-                return {
-                    'assistant_reply': assistant_reply,
-                    'conversation_direction': direction,
-                    'product': product
-
-                }
-            else:
-                assistant_reply = self.answer(results,
-                                              option="Say the customer you don't have the product he asked for")
-                return {
-                    'assistant_reply': assistant_reply,
-                    'conversation_direction': direction,
-                }
-        if direction == "walk_to_staff" and has_staff:
-            staff = results["staff"][0] if len(results["staff"]) > 0 else None
-
-            if staff:
-                results = {'staff': [staff, ]}
-                assistant_reply = self.answer_with_results(results,
-                                                           option="Say the customer you're going to walk him to the staff")
-                return {
-                    'assistant_reply': assistant_reply,
-                    'conversation_direction': direction,
-                    'staff': staff
-                }
-            else:
-                assistant_reply = self.answer(results,
-                                              option="Say the customer you don't have the staff he asked for")
-                return {
-                    'assistant_reply': assistant_reply,
-                    'conversation_direction': direction,
-                }
-        if has_products or has_staff:
-            assistant_reply = self.answer_with_results(results)
-        else:
-            assistant_reply = self.answer()
-        return {
-            'assistant_reply': assistant_reply,
-        }
-
-
-if __name__ == "__main__":
-    database = Database(db_path='test.sqlite')
-    map = Map.from_image(image_path='res/map.png')
-    interface = DataInterface(
-        database=database,
-        map=map,
-        similarity_threshold=0.7
-    )
-    choice = input("What to do with the data? \n"
-                   "Y) Load\n"
-                   "N) Nothing\n")
-    if choice.lower() == 'y':
-        database.delete()
-        with open("../../res/shop_inventory.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if 'staff' in data:
-            for staff in data['staff']:
-                interface.update_staff_information(staff)
-        if 'products' in data:
-            for products in data['products']:
-                interface.update_product_information(products)
-
-    assistant = ShopAssistant(model="llama3", customer_id="id1", data_interface=interface, debug=True)
-
-    print("Welcome to the Sports Shop Assistant!")
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() in {"exit", "quit"}:
-            break
-        response = assistant.respond(user_input)
-        print("[DEBUG] Response: ", response, file=sys.stderr)
-        print(f"Assistant: {response['assistant_reply']}")
-
-    assistant.extract_knowledge()
+            return staff_query

@@ -21,6 +21,23 @@ class Point2D:
 class Polygon:
     vertices: List[Point2D]
 
+    @property
+    def centroid(self) -> Point2D:
+        """
+        Calculate the centroid of the polygon using the formula:
+        Cx = (x1 + x2 + ... + xn) / n
+        Cy = (y1 + y2 + ... + yn) / n
+        where n is the number of vertices.
+        """
+        if not self.vertices:
+            return Point2D(0, 0)
+
+        x_sum = sum(vertex.x for vertex in self.vertices)
+        y_sum = sum(vertex.y for vertex in self.vertices)
+        n = len(self.vertices)
+
+        return Point2D(x_sum // n, y_sum // n)
+
     def contains_point(self, point: Point2D) -> bool:
         """
         Determine whether the given point lies inside the polygon using the ray casting algorithm.

@@ -58,11 +58,11 @@ class EmbeddingsManager:
 class ProductRecommender:
     def __init__(self, all_products, embeddings_manager: EmbeddingsManager = None):
         self.embeddings_manager = embeddings_manager or EmbeddingsManager()
-        self.product_names_emb = np.stack([product.embedded_name for product in all_products])
-        self.product_descriptions_emb = np.stack([product.embedded_description for product in all_products])
-        self.product_categories_emb = np.stack([product.embedded_category for product in all_products])
-        self.product_embedded_brands = np.stack([product.embedded_brand for product in all_products])
-        self.product_embedded_sport_categories = np.stack([product.embedded_sport_category for product in all_products])
+        self.product_names_emb = np.stack([product.embedded_name for product in all_products] if all_products else np.empty((0, 0)))
+        self.product_descriptions_emb = np.stack([product.embedded_description for product in all_products] if all_products else np.empty((0, 0)))
+        self.product_categories_emb = np.stack([product.embedded_category for product in all_products] if all_products else np.empty((0, 0)))
+        self.product_embedded_brands = np.stack([product.embedded_brand for product in all_products] if all_products else np.empty((0, 0)))
+        self.product_embedded_sport_categories = np.stack([product.embedded_sport_category for product in all_products] if all_products else np.empty((0, 0)))
 
         self.all_products = all_products
 

@@ -6,15 +6,12 @@
 # Each entry should be a string in the format "package_name executable_name".
 
 DEFAULT_NODES=(
-    "tiago map_provider"
-    "tiago map_tester"
     "tiago database_interface"
-    "tiago test_database_node"
-<<<<<<< HEAD
     "tiago vision_controller"
-=======
     "tiago path_planner"
->>>>>>> 166161d31db06fface3280c48dfb2a9aadfb25a0
+    "tiago conversation_node"
+    "tiago conversation_simulator"
+    "tiago database_loader_node"
 )
 
 # === Tmux Configuration ===
