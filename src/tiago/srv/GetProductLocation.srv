@@ -1,0 +1,6 @@
+# Request
+string product_id
+---
+# Response
+geometry_msgs/Point2D position
+bool success

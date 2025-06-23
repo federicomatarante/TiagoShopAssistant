@@ -18,22 +18,24 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED) # <-- QUESTA È LA RIGA AGGIUNTA/MODIFICATA
 find_package(ament_cmake_python REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
-find_package(rosidl_default_generators REQUIRED)
+# Questo è un duplicato, puoi rimuoverlo se vuoi:
+# find_package(rosidl_default_generators REQUIRED)
 
 # Get all msg files with relative paths
-file(GLOB msg_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "msg/*.msg") # <-- ADD THIS LINE
+file(GLOB msg_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "msg/*.msg")
 
 # Get all srv files with relative paths
 file(GLOB srv_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "srv/*.srv")
 
 # Generate interfaces (services and messages)
-if(srv_files OR msg_files) # <-- MODIFIED THIS LINE
+if(srv_files OR msg_files)
   rosidl_generate_interfaces(${PROJECT_NAME}
-    ${msg_files}   # <-- ADD THIS LINE
+    ${msg_files}
     ${srv_files}
     DEPENDENCIES geometry_msgs std_msgs
   )
@@ -53,11 +55,7 @@ install(
 )
 # Install Python executables
 
-# install(PROGRAMS
-#   ${PROJECT_NAME}/map_provider.py
-#   DESTINATION lib/${PROJECT_NAME}
-#   RENAME map_provider
-# )
+
 # install(PROGRAMS
 #   ${PROJECT_NAME}/map_tester.py
 #   DESTINATION lib/${PROJECT_NAME}
@@ -106,7 +104,26 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME controller
 )
-
+install(PROGRAMS
+  ${PROJECT_NAME}/conversation_simulator.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME conversation_simulator
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/database_interface.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME database_interface
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/database_loader_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME database_loader_node
+)
+install(PROGRAMS
+  ${PROJECT_NAME}/conversation_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME conversation_node
+)
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
