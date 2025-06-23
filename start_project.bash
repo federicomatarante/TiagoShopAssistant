@@ -13,6 +13,7 @@ DEFAULT_NODES=(
     "tiago path_planner"
     "tiago vision_controller"
     "tiago controller"
+    "tiago tiago_navigation.launch"
 )
 
 # === Tmux Configuration ===

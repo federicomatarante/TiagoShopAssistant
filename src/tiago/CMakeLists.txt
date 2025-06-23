@@ -107,6 +107,10 @@ install(PROGRAMS
   RENAME controller
 )
 
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 
 # Install config files if they exist
