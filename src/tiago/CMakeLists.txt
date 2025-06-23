@@ -53,47 +53,65 @@ install(
 )
 # Install Python executables
 
+# install(PROGRAMS
+#   ${PROJECT_NAME}/map_provider.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME map_provider
+# )
+# install(PROGRAMS
+#   ${PROJECT_NAME}/map_tester.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME map_tester
+# )
+# Install the maps directory to the share folder
+install(
+  DIRECTORY tiago/maps/
+  DESTINATION share/${PROJECT_NAME}/maps
+)
+
+install(
+  DIRECTORY tiago/rviz/
+  DESTINATION share/${PROJECT_NAME}/rviz
+)
+install(
+  DIRECTORY tiago/models/
+  DESTINATION share/${PROJECT_NAME}/models
+)
+install(
+  DIRECTORY tiago/worlds/
+  DESTINATION share/${PROJECT_NAME}/worlds
+)
+# install(PROGRAMS
+#   ${PROJECT_NAME}/database_interface.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME database_interface
+# )
+# install(PROGRAMS
+#   ${PROJECT_NAME}/test_database_node.py
+#   DESTINATION lib/${PROJECT_NAME}
+#   RENAME test_database_node
+# )
 install(PROGRAMS
   ${PROJECT_NAME}/vision_controller.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME vision_controller
 )
 install(PROGRAMS
-  ${PROJECT_NAME}/conversation_node.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME conversation_node
-)
-
-install(PROGRAMS
-  ${PROJECT_NAME}/database_interface.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME database_interface
-)
-
-install(PROGRAMS
-  ${PROJECT_NAME}/conversation_simulator.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME conversation_simulator
-)
-
-install(PROGRAMS
   ${PROJECT_NAME}/path_planner.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME path_planner
 )
 install(PROGRAMS
-  ${PROJECT_NAME}/database_loader_node.py
+  ${PROJECT_NAME}/controller.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME database_loader_node
+  RENAME controller
 )
 
-# Install launch files if they exist
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/launch)
-  install(DIRECTORY
-    launch/
-    DESTINATION share/${PROJECT_NAME}/launch
-  )
-endif()
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 
 # Install config files if they exist
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config)

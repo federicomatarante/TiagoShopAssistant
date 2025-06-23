@@ -1,0 +1,14 @@
+material CustomerTag
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture ../textures/tag_2.png
+        filtering trilinear
+      }
+    }
+  }
+}

@@ -51,48 +51,15 @@ class AStarPathPlanner:
         
         if negate:
             grid = 255 - grid
+        # This logic is correct based on your check_grid.py output
+        internal_grid = (grid < ((1.0 - occupied_thresh) * 255)).astype(np.uint8)
+
+        # --- THIS IS THE FIX ---
+        # Flip the grid vertically to align with ROS's bottom-left origin
+        internal_grid = np.flipud(internal_grid)
+        # ---------------------
         
-        # In your PGM, 0 is occupied, 255 is free.
-        # The map server interprets values: 0 for free, 100 for occupied.
-        # For A*, we typically use 0 for free, 1 for occupied.
-        # Your current logic: (grid > (occupied_thresh * 255))
-        # If occupied_thresh is 0.65, this means pixels > 165.75 are obstacles (1).
-        # This seems inverted if your PGM has 0=occupied, 255=free.
-        # Standard map_server interpretation of PGM (negate=0):
-        #   - pixels < free_thresh*255 are free (0)
-        #   - pixels > occupied_thresh*255 are occupied (100 for map_server, 1 for A*)
-        #   - pixels in between are unknown
-        # Let's assume the PGM stores 0 for occupied, 255 for free.
-        # We want grid cells to be 1 if occupied, 0 if free.
-        # So, if a PGM pixel value is low (e.g., < 0.1*255 = 25.5), it's an obstacle.
-        # If it's high (e.g., > 0.9*255 = 242), it's free.
-        # Map server uses free_thresh and occupied_thresh.
-        # A common way for PGM where 0=black/occupied, 255=white/free is:
-        # occupied = (grid < (free_thresh * 255)) # pixels darker than free_thresh are occupied
-        # This also depends on the 'negate' flag.
-        # Given your current setup: `return (grid > (occupied_thresh * 255)).astype(np.uint8)`
-        # If PGM 0=occupied, 255=free, and negate=0:
-        # This means if pixel_value > 0.65*255 (=165.75), it's an obstacle (1). This is correct if lighter colors are obstacles.
-        # If PGM 0=occupied means black=obstacle, then this is inverted.
-        # Let's assume the map_generator output PGM (0=occupied, 255=free)
-        # And the map.yaml has negate: 0.
-        # Then map_server considers values close to 0 as occupied.
-        # For A* (1 = occupied, 0 = free):
-        # We need to identify pixels that are considered occupied.
-        # Thresholds are usually between 0.0 and 1.0 for map_server.
-        # occupied_thresh = 0.65  (values above this fraction of 255 are occupied)
-        # free_thresh = 0.196 (values below this fraction of 255 are free)
-        # If negate is 0:
-        #   grid value < free_thresh * 255 means free.
-        #   grid value > occupied_thresh * 255 means occupied.
-        # So for our internal grid where 1 is occupied:
-        return (grid < ( (1.0 - occupied_thresh) * 255) ).astype(np.uint8) # Assuming 0 is black/occupied
-                                                                      # This will make dark areas 1.
-                                                                      # If your map PGM is 0=occupied, 255=free, then
-                                                                      # occupied pixels are those with low values.
-                                                                      # Example: if pixel value is 10, 10 < (1-0.65)*255 = 0.35*255 = 89.25 -> True (1, occupied)
-                                                                      # if pixel value is 250, 250 < 89.25 -> False (0, free)
-                                                                      # This seems more standard for PGM where 0=occupied.
+        return internal_grid
 
     def _heuristic(self, a, b, w):
         distance_to_goal = np.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2)
