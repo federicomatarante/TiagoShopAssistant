@@ -2,5 +2,5 @@
 string staff_id
 ---
 # Response
-geometry_msgs/Point2D position
+geometry_msgs/Point position
 bool success
