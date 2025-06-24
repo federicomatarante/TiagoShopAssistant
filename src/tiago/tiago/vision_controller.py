@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
+from geometry_msgs.msg import Point, PointStamped
+from tf2_ros import TransformListener, Buffer
+import tf2_geometry_msgs
 from cv_bridge import CvBridge
 import json
 import numpy as np
 import cv2
 import apriltag
+import time
+from collections import defaultdict
 
 class VisionController(Node):
     def __init__(self):
@@ -18,6 +23,20 @@ class VisionController(Node):
 
         self.log_counter = 0
         self.current_depth_image = None
+
+        # Camera intrinsics (will be updated from camera_info)
+        self.camera_intrinsics = None
+        self.camera_frame = 'head_front_camera_rgb_optical_frame'
+        self.world_frame = 'map'
+
+        # TF2 setup for coordinate transformations
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Person tracking storage
+        self.tracked_persons = {}  # person_id -> PersonTracker
+        self.next_person_id = 1
+        self.person_timeout = 5.0  # seconds
         
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
@@ -33,6 +52,13 @@ class VisionController(Node):
             self.depth_callback,
             10)
         
+        # Subscription to camera info for intrinsics
+        self.camera_info_subscription = self.create_subscription(
+            CameraInfo,
+            '/head_front_camera/rgb/camera_info',
+            self.camera_info_callback,
+            10)
+            
         # Publisher for detection results
         self.result_publisher = self.create_publisher(
             String,
@@ -105,7 +131,65 @@ class VisionController(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error in depth callback: {e}')
-            
+
+    def camera_info_callback(self, msg):
+        """Process camera intrinsics parameters"""
+        if self.camera_intrinsics is None:
+            # Extract camera intrinsics from CameraInfo message
+            self.camera_intrinsics = {
+                'fx': msg.k[0],  # Focal length x
+                'fy': msg.k[4],  # Focal length y
+                'cx': msg.k[2],  # Principal point x
+                'cy': msg.k[5],  # Principal point y
+                'width': msg.width,
+                'height': msg.height
+            }
+            self.get_logger().info(f'Camera intrinsics loaded: fx={self.camera_intrinsics["fx"]:.1f}, fy={self.camera_intrinsics["fy"]:.1f}')
+
+            # Unsubscribe after getting intrinsics (they are static )
+            self.destroy_subscription(self.camera_info_subscription)
+ 
+    def pixel_to_3d_camera(self, u, v, depth):
+        """Convert pixel coordinates + depth to 3D camera coordinates"""
+        if self.camera_intrinsics is None or depth is None or depth <= 0:
+            return None
+
+        # Convert pixel coordinates to 3D camera coordinates
+        # Using pinhole camera model: X = (u - cx) * Z / fx, Y = (v - cy) * Z / fy
+        fx = self.camera_intrinsics['fx']
+        fy = self.camera_intrinsics['fy']
+        cx = self.camera_intrinsics['cx']
+        cy = self.camera_intrinsics['cy']
+
+        # 3D point in camera coordinate frame
+        x_cam = (u - cx) * depth / fx
+        y_cam = (v - cy) * depth / fy
+        z_cam = depth 
+
+        return [x_cam, y_cam, z_cam]
+
+    def transform_to_world_coordinates(self, camera_point, timestamp):
+        """Transform 3D camera coordinates to world coordinates"""
+        if camera_point is None:
+            return None
+        try:
+            # Create a PointStamped in camera frame
+            point_camera = PointStamped()
+            point_camera.header.frame_id = self.camera_frame
+            point_camera.header.stamp = timestamp
+            point_camera.point.x = camera_point[0]
+            point_camera.point.y = camera_point[1]
+            point_camera.point.z = camera_point[2]
+
+            # Transform to world coordinates
+            point_world = self.tf_buffer.transform(point_camera, self.world_frame)
+
+            return [point_world.point.x, point_world.point.y, point_world.point.z]
+        
+        except Exception as e:
+            self.get_logger().error(f'Error transforming to world coordinates: {e}')
+            return None
+
     def get_person_depth(self, person_rect, depth_image):
         """Extract reliable depth measurement for a detected person"""
         if depth_image is None:
@@ -130,8 +214,8 @@ class VisionController(Node):
         sample_y1 = max(0, min(sample_y1, depth_image.shape[0] - 1))
         sample_y2 = max(sample_y1 + 1, min(sample_y2, depth_image.shape[0]))
 
-        # Extract deth values from the sampling region
-        depth_region = depth_image[sample_y1:sample_y2, sample_x1:sample_x2
+        # Extract depth values from the sampling region
+        depth_region = depth_image[sample_y1:sample_y2, sample_x1:sample_x2]
         
         # Filter out invalid depth values
         valid_depths = depth_region[
@@ -229,45 +313,7 @@ class VisionController(Node):
         
         return matches
 
-    # # Face detection in person region
-    # def detect_faces_in_person(self, image, person_rect):
-    #     """Detect faces within a person's bounding box"""
-    #     if self.face_cascade is None:
-    #         return []
-
-    #     try:
-    #         x, y, w, h = person_rect
-    #         person_roi = image[y:y+h, x:x+w]
-    #         gray_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
-            
-    #         faces = self.face_cascade.detectMultiScale(gray_roi, 1.1, 4)
-            
-    #         # Convert face coordinates back to full image coordinates
-    #         adjusted_faces = []
-    #         for (fx, fy, fw, fh) in faces:
-    #             adjusted_faces.append((x + fx, y + fy, fw, fh))
-            
-    #         return adjusted_faces
-    #     except Exception as e:
-    #         self.get_logger().error(f'Error during face detection: {e}')
-    #         return []
-
-    # Face recognition placeholder
-    # def recognize_face(self, image, face_rect):
-    #     """Recognize face and return staff info if found"""
-    #     # Implement actual face recognition with embeddings
-    #     # For now: placeholder logic
-        
-    #     # Extract face region for future embedding comparison
-    #     x, y, w, h = face_rect
-    #     face_roi = image[y:y+h, x:x+w]
-        
-    #     # Placeholder: random staff recognition for demo
-    #     # In real implementation: compare face_roi embedding with staff_database
-        
-    #     return None  # No recognition yet - placeholder
-
-    # Badge color detection method
+    # Badge detection method
     def detect_badge_type(self, image, person_rect):
         """Detect badge type in person chest area"""
         try:
@@ -305,7 +351,7 @@ class VisionController(Node):
             self.get_logger().error(f'Error in badge detection: {e}')
             return 'unknown'
 
-    def classify_person_with_tag(self, image, person_rect, tag_info=None):
+    def classify_person_with_tag(self, image, person_rect, tag_info=None, timestamp=None):
         """Complete pipeline: person -> AprilTag detection -> classification"""
         
         x, y, w, h = person_rect
@@ -315,34 +361,72 @@ class VisionController(Node):
             tag_data = self.tag_mapping[tag_info['id']]
             confidence = min(0.95, max(0.5, tag_info['confidence'] / 50.0))  # Normalize confidence
             
+            # Calculate world coordinates
+            person_center_u = x + w // 2
+            person_center_v = y + h // 2
+            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
+
+            world_coords = None
+            if person_depth is not None:
+                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
+                if camera_coords is not None and timestamp is not None:
+                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
+
             return {
                 'person_type': tag_data['type'],
                 'name': tag_data['name'],
                 'tag_id': tag_info['id'],
                 'confidence': confidence,
-                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'tag_center': tag_info['center'].tolist(),  # Convert numpy array to list
+                'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'world_position': world_coords,
+                'depth': person_depth,
+                'tag_center': tag_info['center'].tolist(),
                 'tag_confidence': tag_info['confidence'],
                 'detection_method': 'apriltag'
             }
         elif tag_info:
             # AprilTag detected but unknown ID
+            # Calculate world coordinates
+            person_center_u = x + w // 2
+            person_center_v = y + h // 2
+            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
+
+            world_coords = None
+            if person_depth is not None:
+                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
+                if camera_coords is not None and timestamp is not None:
+                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
             return {
                 'person_type': 'unknown',
                 'name': f'Unknown Tag ID {tag_info["id"]}',
                 'tag_id': tag_info['id'],
                 'confidence': 0.8,
-                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'world_position': world_coords,
+                'depth': person_depth,
                 'tag_center': tag_info['center'].tolist(),
                 'detection_method': 'apriltag_unknown'
             }
         else:
             # No AprilTag detected
+            # Calculate world coordinates
+            person_center_u = x + w // 2
+            person_center_v = y + h // 2
+            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
+
+            world_coords = None
+            if person_depth is not None:
+                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
+                if camera_coords is not None and timestamp is not None:
+                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
+            
             return {
                 'person_type': 'unknown',
                 'name': 'Person without badge',
                 'confidence': 0.3,
-                'position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
+                'world_position': world_coords,
+                'depth': person_depth,
                 'detection_method': 'no_apriltag'
             }
     
@@ -377,7 +461,8 @@ class VisionController(Node):
                     result = self.classify_person_with_tag(
                         cv_image,
                         match['person_rect'],
-                        match['tag']
+                        match['tag'],
+                        msg.header.stamp
                     )
                     
                     # Publish result (ALWAYS)
