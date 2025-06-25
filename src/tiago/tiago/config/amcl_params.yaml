@@ -1,0 +1,96 @@
+# amcl_params.yaml
+
+amcl:
+  ros__parameters:
+    use_sim_time: True # Set to False if using a real robot without Gazebo sim time
+
+    # Remove scan_topic - use remapping instead
+
+    # set_initial_pose: true # Set to true if you want to set initial pose via /initialpose topic
+
+    initial_pose_x: 0.0
+    initial_pose_y: 0.0
+
+    initial_pose_a: 1.57 # Initial yaw angle in radians
+
+    # always_reset_initial_pose: true # This will automatically use the initial_pose_x/y/a values on startup
+
+
+    # Frames - CORRECTED FOR TIAGO
+
+    base_frame_id: base_footprint # TiAGo uses base_footprint, not base_link
+
+    odom_frame_id: odom
+
+    global_frame_id: map
+
+
+
+    # AMCL General Parameters
+
+    min_particles: 500
+
+    max_particles: 5000
+
+    kld_err: 0.05
+
+    kld_z: 0.99
+
+    update_min_d: 0.25 # Minimum translational movement to trigger a filter update (meters)
+
+    update_min_a: 0.2 # Minimum rotational movement to trigger a filter update (radians)
+    resample_interval: 1
+
+    transform_tolerance: 1.0 # Max time (s) to wait for transforms
+
+    recovery_alpha_slow: 0.001
+
+    recovery_alpha_fast: 0.1
+
+    tf_broadcast: true # Re-enable transform broadcasting
+
+
+
+    # Odometry Model Parameters
+
+    # Adjust these based on your robot's odometry behavior
+
+    # For differential drive robots
+
+    odom_model_type: diff
+
+    odom_alpha1: 0.1 # Translational noise from translational motion
+
+    odom_alpha2: 0.1 # Rotational noise from translational motion
+
+    odom_alpha3: 0.1 # Translational noise from rotational motion
+
+    odom_alpha4: 0.1 # Rotational noise from rotational motion
+
+    odom_alpha5: 0.1 # Drift noise (forward)
+
+    # Laser Model Parameters
+
+    laser_model_type: "likelihood_field" # "beam" or "likelihood_field"
+
+    laser_likelihood_max_dist: 2.0
+
+    laser_max_range: 10.0 # Max range of your lidar sensor
+
+    laser_min_range: 0.1 # Min range of your lidar sensor
+
+    laser_z_hit: 0.5
+
+    laser_z_short: 0.05
+
+    laser_z_max: 0.05
+
+    laser_z_rand: 0.5
+    laser_sigma_hit: 0.2
+
+
+    # Map-related parameters
+
+    always_reset_initial_pose: false # If true, initial pose will always be reset on startup
+
+    # For more advanced tuning, refer to Nav2 AMCL documentation
