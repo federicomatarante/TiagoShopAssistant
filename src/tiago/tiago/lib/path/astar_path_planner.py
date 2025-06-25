@@ -27,7 +27,7 @@ class AStarPathPlanner:
             self.map_data = yaml.safe_load(f)
         
         self.grid = self._load_occupancy_grid(self.map_data['image'])
-        self.resolution = self.map_data.get('resolution', 0.05)
+        self.resolution = self.map_data.get('resolution', 0.014)
         self.height, self.width = self.grid.shape
         self.movements = [
             (0, 1), (0, -1), (1, 0), (-1, 0),
