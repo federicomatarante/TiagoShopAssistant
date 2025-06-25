@@ -68,6 +68,11 @@ install(
 )
 
 install(
+  DIRECTORY tiago/config/
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
+install(
   DIRECTORY tiago/rviz/
   DESTINATION share/${PROJECT_NAME}/rviz
 )

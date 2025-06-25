@@ -13,12 +13,13 @@ DEFAULT_NODES=(
     "tiago database_loader_node"
     "tiago path_planner"
     "tiago vision_controller"
+    "tiago controller"
     "tiago tiago_navigation.launch"
 )
 
 # === Tmux Configuration ===
 SESSION_NAME="ros2_nodes"
-USE_TMUX=true  # Set to false to use the old background process method
+USE_TMUX=true   # Set to false to use the old background process method
 
 # =================================================
 
@@ -30,14 +31,14 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -h, --help          Show this help message"
-    echo "  --no-tmux          Run nodes as background processes instead of tmux"
-    echo "  --tmux             Force tmux mode (default)"
-    echo "  --session NAME     Use custom tmux session name (default: $SESSION_NAME)"
+    echo "  --no-tmux           Run nodes as background processes instead of tmux"
+    echo "  --tmux              Force tmux mode (default)"
+    echo "  --session NAME      Use custom tmux session name (default: $SESSION_NAME)"
     echo ""
     echo "Examples:"
-    echo "  $0                           # Run default nodes in tmux"
-    echo "  $0 --no-tmux                # Run default nodes as background processes"
-    echo "  $0 tiago/database            # Run specific node in tmux"
+    echo "  $0                  # Run default nodes in tmux"
+    echo "  $0 --no-tmux        # Run default nodes as background processes"
+    echo "  $0 tiago/database   # Run specific node in tmux"
     echo "  $0 --session my_session tiago/database tiago/map_provider"
     echo ""
     echo "Default nodes configured:"
@@ -149,48 +150,55 @@ if [ "$USE_TMUX" = true ]; then
         tmux kill-session -t "$SESSION_NAME"
     fi
 
-    # <<<<<<<<<<<<<<<< START OF MODIFIED TMUX LOGIC <<<<<<<<<<<<<<<<
+    # <<<<<<<<<<<<<<<< START OF MODIFIED TMUX LOGIC (No Map Server) <<<<<<<<<<<<<<<<
 
-    # 1. Start the Map Server as the FIRST window in a new session.
-    echo "--> Creating tmux session '$SESSION_NAME' and starting map_server..."
-    tmux new-session -d -s "$SESSION_NAME" -n "map_server"
-    tmux send-keys -t "$SESSION_NAME:map_server" "source install/setup.bash" Enter
-    tmux send-keys -t "$SESSION_NAME:map_server" "ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=$WORKSPACE_ROOT/install/tiago/share/tiago/maps/my_map.yaml" Enter
+    # Create the tmux session with the first node from the DEFAULT_NODES list
+    # or a placeholder if NODES_TO_LAUNCH_SPECS is empty (though it should not be at this point)
+    if [ ${#NODES_TO_LAUNCH_SPECS[@]} -gt 0 ]; then
+        # Take the first node from the list to create the initial window
+        read -r first_package_name first_executable_name <<< "${NODES_TO_LAUNCH_SPECS[0]}"
+        first_window_name="${first_package_name}_${first_executable_name}"
 
-    # 2. Wait, then activate the map server from the main script.
-    echo "--> Waiting for Map Server to initialize..."
-    sleep 3 # Use 3 seconds for more stability
-    echo "--> Activating the Map Server..."
-    ros2 lifecycle set /map_server configure
-    ros2 lifecycle set /map_server activate
-    echo "--> Map Server is active."
+        echo "Creating tmux session '$SESSION_NAME' and starting '$first_window_name'..."
+        tmux new-session -d -s "$SESSION_NAME" -n "$first_window_name"
+        tmux send-keys -t "$SESSION_NAME:$first_window_name" "cd '$WORKSPACE_ROOT'" Enter
+        tmux send-keys -t "$SESSION_NAME:$first_window_name" "source install/setup.bash" Enter
+        # tmux send-keys -t "$SESSION_NAME:$first_window_name" "echo 'Starting $first_executable_name from package $first_package_name...'" Enter
+        # tmux send-keys -t "$SESSION_NAME:$first_window_name" "ros2 run $first_package_name $first_executable_name" Enter
+        # sleep 0.5
 
-    # 3. Start RViz in its own dedicated window.
+        # Now loop through the *rest* of the nodes (starting from the second one)
+        # to add them as NEW windows.
+        for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
+            read -r current_package_name current_executable_name <<< "$node_info_str"
+            if [ -z "$current_package_name" ] || [ -z "$current_executable_name" ]; then
+                echo "Warning: Skipping invalid or empty node entry '$node_info_str'."
+                continue
+            fi
+
+            window_name="${current_package_name}_${current_executable_name}"
+            echo "Creating window '$window_name'..."
+            tmux new-window -t "$SESSION_NAME" -n "$window_name"
+
+            tmux send-keys -t "$SESSION_NAME:$window_name" "cd '$WORKSPACE_ROOT'" Enter
+            tmux send-keys -t "$SESSION_NAME:$window_name" "source install/setup.bash" Enter
+            tmux send-keys -t "$SESSION_NAME:$window_name" "echo 'Starting $current_executable_name from package $current_package_name...'" Enter
+            tmux send-keys -t "$SESSION_NAME:$window_name" "ros2 run $current_package_name $current_executable_name" Enter
+            sleep 0.5
+        done
+    else
+        echo "No nodes specified to launch. Exiting tmux session creation."
+        exit 0 # Exit if no nodes to launch
+    fi
+    
+    # RViz (optional, uncomment if you want RViz without Map Server)
     # echo "--> Starting RViz..."
     # tmux new-window -t "$SESSION_NAME" -n "rviz"
+    # tmux send-keys -t "$SESSION_NAME:rviz" "cd '$WORKSPACE_ROOT'" Enter # Important for relative paths
     # tmux send-keys -t "$SESSION_NAME:rviz" "source install/setup.bash" Enter
     # tmux send-keys -t "$SESSION_NAME:rviz" "ros2 run rviz2 rviz2 -d \$(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz" Enter
 
-    # 4. Now, loop through the user's default nodes and add them as NEW windows.
-    for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
-        read -r current_package_name current_executable_name <<< "$node_info_str"
-        if [ -z "$current_package_name" ] || [ -z "$current_executable_name" ]; then
-            echo "Warning: Skipping invalid or empty node entry '$node_info_str'."
-            continue
-        fi
-
-        window_name="${current_package_name}_${current_executable_name}"
-        echo "Creating window '$window_name'..."
-        tmux new-window -t "$SESSION_NAME" -n "$window_name"
-
-        tmux send-keys -t "$SESSION_NAME:$window_name" "cd '$WORKSPACE_ROOT'" Enter
-        tmux send-keys -t "$SESSION_NAME:$window_name" "source install/setup.bash" Enter
-        tmux send-keys -t "$SESSION_NAME:$window_name" "echo 'Starting $current_executable_name from package $current_package_name...'" Enter
-        tmux send-keys -t "$SESSION_NAME:$window_name" "ros2 run $current_package_name $current_executable_name" Enter
-        sleep 0.5
-    done
-    
-    # <<<<<<<<<<<<<<<< END OF MODIFIED TMUX LOGIC <<<<<<<<<<<<<<<<
+    # <<<<<<<<<<<<<<<< END OF MODIFIED TMUX LOGIC (No Map Server) <<<<<<<<<<<<<<<<
 
     # Create a control window for monitoring
     echo "Creating control window..."
@@ -211,8 +219,10 @@ if [ "$USE_TMUX" = true ]; then
     tmux send-keys -t "$SESSION_NAME:control" "echo ''" Enter
     tmux send-keys -t "$SESSION_NAME:control" "echo 'To kill all nodes and exit: tmux kill-session -t $SESSION_NAME'" Enter
 
-    # Go to the first node window
-    tmux select-window -t "$SESSION_NAME:0"
+    # Go to the first node window (which is now the first node in your DEFAULT_NODES list)
+    if [ ${#NODES_TO_LAUNCH_SPECS[@]} -gt 0 ]; then
+        tmux select-window -t "$SESSION_NAME:$first_window_name"
+    fi
 
     echo ""
     echo "=== Tmux session '$SESSION_NAME' created successfully! ==="
@@ -270,27 +280,11 @@ else
     # Trap SIGINT (Ctrl+C) and SIGTERM (system shutdown) and call cleanup
     trap cleanup SIGINT SIGTERM
 
-    # <<<<<<<<<<<<<<<< START OF MODIFIED BACKGROUND LOGIC <<<<<<<<<<<<<<<<
+    # <<<<<<<<<<<<<<<< START OF MODIFIED BACKGROUND LOGIC (No Map Server) <<<<<<<<<<<<<<<<
 
-    # 1. Start and activate the Map Server.
-    echo "--> Starting and activating the Map Server..."
-    ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=$WORKSPACE_ROOT/install/tiago/share/tiago/maps/my_map.yaml &
-    PIDS+=($!)
-    NODE_DESCRIPTIONS+=("Map Server")
-    echo "--> Waiting for Map Server to initialize..."
-    sleep 3 # Use 3 seconds for more stability
-    echo "--> Activating the Map Server..."
-    ros2 lifecycle set /map_server configure
-    ros2 lifecycle set /map_server activate
-    echo "--> Map Server is active."
+    # (No map server or RViz here, assuming they are manually handled or not needed in this mode)
 
-    # 2. Start RViz.
-    # echo "--> Starting RViz..."
-    # ros2 run rviz2 rviz2 -d $(ros2 pkg prefix tiago)/share/tiago/rviz/path_planning.rviz &
-    # PIDS+=($!)
-    # NODE_DESCRIPTIONS+=("RViz")
-
-    # <<<<<<<<<<<<<<<< END OF MODIFIED BACKGROUND LOGIC <<<<<<<<<<<<<<<<
+    # <<<<<<<<<<<<<<<< END OF MODIFIED BACKGROUND LOGIC (No Map Server) <<<<<<<<<<<<<<<<
 
     for node_info_str in "${NODES_TO_LAUNCH_SPECS[@]}"; do
         read -r current_package_name current_executable_name <<< "$node_info_str"
