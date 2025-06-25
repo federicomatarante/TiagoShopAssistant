@@ -1,0 +1,15 @@
+[submodule "src/tiago_simulation"]
+	path = src/tiago_simulation
+	url = https://github.com/pal-robotics/tiago_simulation
+
+[submodule "src/tiago_robot"]
+	path = src/tiago_robot
+	url = https://github.com/pal-robotics/tiago_robot
+
+[submodule "src/tiago_navigation"]
+	path = src/tiago_navigation
+	url = https://github.com/pal-robotics/tiago_navigation
+
+[submodule "src/pal_gazebo_worlds"]
+	path = src/pal_gazebo_worlds
+	url = https://github.com/pal-robotics/pal_gazebo_worlds
