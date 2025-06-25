@@ -153,17 +153,17 @@ if [ "$USE_TMUX" = true ]; then
 
     # 1. Start the Map Server as the FIRST window in a new session.
     echo "--> Creating tmux session '$SESSION_NAME' and starting map_server..."
-    tmux new-session -d -s "$SESSION_NAME" -n "map_server"
-    tmux send-keys -t "$SESSION_NAME:map_server" "source install/setup.bash" Enter
-    tmux send-keys -t "$SESSION_NAME:map_server" "ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=$WORKSPACE_ROOT/install/tiago/share/tiago/maps/my_map.yaml" Enter
+    tmux new-session -d -s "$SESSION_NAME" #-n "map_server"
+    # tmux send-keys -t "$SESSION_NAME:map_server" "source install/setup.bash" Enter
+    # tmux send-keys -t "$SESSION_NAME:map_server" "ros2 run nav2_map_server map_server --ros-args -p yaml_filename:=$WORKSPACE_ROOT/install/tiago/share/tiago/maps/my_map.yaml" Enter
 
     # 2. Wait, then activate the map server from the main script.
-    echo "--> Waiting for Map Server to initialize..."
-    sleep 3 # Use 3 seconds for more stability
-    echo "--> Activating the Map Server..."
-    ros2 lifecycle set /map_server configure
-    ros2 lifecycle set /map_server activate
-    echo "--> Map Server is active."
+    # echo "--> Waiting for Map Server to initialize..."
+    # sleep 3 # Use 3 seconds for more stability
+    # echo "--> Activating the Map Server..."
+    # ros2 lifecycle set /map_server configure
+    # ros2 lifecycle set /map_server activate
+    # echo "--> Map Server is active."
 
     # 3. Start RViz in its own dedicated window.
     # echo "--> Starting RViz..."
