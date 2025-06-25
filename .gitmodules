@@ -12,4 +12,4 @@
 
 [submodule "src/pal_gazebo_worlds"]
 	path = src/pal_gazebo_worlds
-	url = https://github.com/federicomatarante/pal_gazebo_worlds
+	url = https://github.com/SandriLeonardo/pal_gazebo_worlds
