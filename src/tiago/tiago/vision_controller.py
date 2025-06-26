@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.duration import Duration
+from rclpy.time import Time
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
 from geometry_msgs.msg import Point, PointStamped
@@ -26,8 +28,8 @@ class VisionController(Node):
 
         # Camera intrinsics (will be updated from camera_info)
         self.camera_intrinsics = None
-        self.camera_frame = 'head_front_camera_rgb_optical_frame'
-        self.world_frame = 'map'
+        self.camera_frame = 'head_front_camera_color_optical_frame'
+        self.world_frame = 'base_link'
 
         # TF2 setup for coordinate transformations
         self.tf_buffer = Buffer()
@@ -84,10 +86,14 @@ class VisionController(Node):
         # AprilTag detection
         self.apriltag_detector = apriltag.Detector()
         
-        # Tag ID mapping
+        # Tag ID mapping - unique person IDs
         self.tag_mapping = {
-            1: {'type': 'staff', 'name': 'Staff Member'},
-            2: {'type': 'customer', 'name': 'Customer'}
+            1: {'type': 'staff', 'name': 'staff_leonardo'},
+            2: {'type': 'staff', 'name': 'staff_lorenzo'},
+            3: {'type': 'staff', 'name': 'staff_federico'},
+            4: {'type': 'customer', 'name': 'customer_emanuele'},
+            5: {'type': 'customer', 'name': 'customer_niccolo'},
+            6: {'type': 'customer', 'name': 'customer_antonello'}
         }
         
         self.get_logger().info('AprilTag detector initialized')
@@ -161,7 +167,8 @@ class VisionController(Node):
         cx = self.camera_intrinsics['cx']
         cy = self.camera_intrinsics['cy']
 
-        # 3D point in camera coordinate frame
+        # 3D point in camera optical coordinate frame
+        # In optical frame: X=right, Y=down, Z=forward
         x_cam = (u - cx) * depth / fx
         y_cam = (v - cy) * depth / fy
         z_cam = depth 
@@ -173,10 +180,13 @@ class VisionController(Node):
         if camera_point is None:
             return None
         try:
+            # Get the latest available transform time
+            latest_time = self.tf_buffer.get_latest_common_time(self.camera_frame, self.world_frame)
+            
             # Create a PointStamped in camera frame
             point_camera = PointStamped()
             point_camera.header.frame_id = self.camera_frame
-            point_camera.header.stamp = timestamp
+            point_camera.header.stamp = latest_time.to_msg()
             point_camera.point.x = camera_point[0]
             point_camera.point.y = camera_point[1]
             point_camera.point.z = camera_point[2]
@@ -232,7 +242,38 @@ class VisionController(Node):
         person_depth = np.median(valid_depths)
 
         return float(person_depth) 
+
+    def get_depth_at_point(self, u, v, depth_image):
+        """Get depth value at specific pixel coordinates"""
+        if depth_image is None:
+            return None
         
+        # Ensure coordinates are within image bounds
+        h, w = depth_image.shape
+        u = max(0, min(u, w - 1))
+        v = max(0, min(v, h - 1))
+        
+        # Sample a small region around the point for robustness
+        sample_size = 3
+        u_start = max(0, u - sample_size // 2)
+        u_end = min(w, u + sample_size // 2 + 1)
+        v_start = max(0, v - sample_size // 2)
+        v_end = min(h, v + sample_size // 2 + 1)
+        
+        depth_region = depth_image[v_start:v_end, u_start:u_end]
+        
+        # Filter valid depths
+        valid_depths = depth_region[
+            (depth_region > 0.1) &
+            (depth_region < 10.0) &
+            (~np.isnan(depth_region)) &
+            (~np.isinf(depth_region))
+        ]
+        
+        if len(valid_depths) == 0:
+            return None
+            
+        return float(np.median(valid_depths))
 
     def detect_persons(self, image):
         """Detect persons in the given image"""
@@ -477,7 +518,13 @@ class VisionController(Node):
                         method = result.get('detection_method', 'unknown')
                         confidence = result.get('confidence', 0.0)
                         tag_id = result.get('tag_id', 'None')
+                        world_pos = result.get('world_position', None)
+                        depth = result.get('depth', None)
+                        pixel_pos = result.get('pixel_position', 'None')
+                        
                         self.get_logger().info(f'Classified {person_type}: {name} (method: {method}, tag_id: {tag_id}, confidence: {confidence:.2f})')
+                        self.get_logger().info(f'  Pixel: {pixel_pos}, Depth: {depth:.3f}m' if depth else f'  Pixel: {pixel_pos}, Depth: None')
+                        self.get_logger().info(f'  World Position: [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]' if world_pos else '  World Position: None')
 
             elif len(detected_tags) > 0 and should_log:
                 self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s)')
