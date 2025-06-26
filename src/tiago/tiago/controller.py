@@ -1,168 +1,285 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.action import ActionClient
 import math
-import numpy as np
+import time
 
 # Message types
-from nav_msgs.msg import Path, Odometry
-from geometry_msgs.msg import Twist, Pose
+from nav_msgs.msg import Path
+from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import PoseStamped, Point, Quaternion as RosQuaternion
+from action_msgs.msg import GoalStatus
 
-def euler_from_quaternion(quaternion):
+def _yaw_to_quaternion(yaw_radians):
+    """Helper function to convert yaw angle (in radians) to ROS Quaternion."""
+    q = RosQuaternion()
+    q.x = 0.0
+    q.y = 0.0
+    q.z = math.sin(yaw_radians / 2.0)
+    q.w = math.cos(yaw_radians / 2.0)
+    return q
+
+
+def _quaternion_to_yaw(quaternion):
+    """Helper function to convert ROS Quaternion to yaw angle (in radians)."""
+    return math.atan2(
+        2.0 * (quaternion.w * quaternion.z + quaternion.x * quaternion.y),
+        1.0 - 2.0 * (quaternion.y**2 + quaternion.z**2)
+    )
+
+
+def _compute_yaw_towards(target: PoseStamped, previous: PoseStamped = None):
+    """Compute yaw pointing from previous pose to target. If no previous, point along +X."""
+    if previous:
+        dx = target.pose.position.x - previous.pose.position.x
+        dy = target.pose.position.y - previous.pose.position.y
+    else:
+        dx, dy = 1.0, 0.0
+    return math.atan2(dy, dx)
+
+
+class SimpleNavigationController(Node):
     """
-    Converts a quaternion into Euler angles (roll, pitch, yaw).
-    yaw is the rotation around the z-axis.
-    """
-    x = quaternion.x
-    y = quaternion.y
-    z = quaternion.z
-    w = quaternion.w
-
-    t0 = +2.0 * (w * x + y * z)
-    t1 = +1.0 - 2.0 * (x * x + y * y)
-    roll_x = math.atan2(t0, t1)
-
-    t2 = +2.0 * (w * y - z * x)
-    t2 = +1.0 if t2 > +1.0 else t2
-    t2 = -1.0 if t2 < -1.0 else t2
-    pitch_y = math.asin(t2)
-
-    t3 = +2.0 * (w * z + x * y)
-    t4 = +1.0 - 2.0 * (y * y + z * z)
-    yaw_z = math.atan2(t3, t4)
-
-    return roll_x, pitch_y, yaw_z
-
-class Controller(Node):
-    """
-    A ROS 2 node to control the robot's actions. For now, it follows a given path.
+    A simple ROS 2 node that receives a path and navigates to each waypoint 
+    using Nav2's NavigateToPose action, with improved error handling and recovery.
     """
     def __init__(self):
-        super().__init__('controller')
-        self.get_logger().info("Controller node has been started.")
+        super().__init__('simple_navigation_controller')
+        self.get_logger().info("Simple Navigation Controller node has been started.")
 
         # --- Parameters ---
-        self.declare_parameter('kp_linear', 1.5)      # Proportional gain for linear velocity
-        self.declare_parameter('kp_angular', 2.0)     # Proportional gain for angular velocity
-        self.declare_parameter('goal_tolerance', 0.1) # Distance in meters to consider a waypoint reached
-        self.declare_parameter('max_linear_speed', 2.0) # Maximum linear speed (m/s)
-        self.declare_parameter('max_angular_speed', 1.5) # Maximum angular speed (rad/s)
+        self.declare_parameter('goal_tolerance', 0.1)
+        self.declare_parameter('navigation_timeout', 120.0)  # seconds
+        self.declare_parameter('goal_send_timeout', 5.0)     # seconds
+        self.declare_parameter('max_retry_attempts', 3)      # max retries per waypoint
+        self.declare_parameter('retry_delay', 2.0)           # seconds between retries
 
         # --- State Variables ---
         self.current_path = []
         self.target_waypoint_index = 0
-        self.current_pose = None
-        
+        self.is_navigating = False
+        self.current_goal_handle = None
+        self.retry_count = 0
+        self.max_retries = self.get_parameter('max_retry_attempts').value
+        self.retry_delay = self.get_parameter('retry_delay').value
+        self.goal_start_time = None
+
+        # --- Nav2 Action Client ---
+        self._nav_action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.get_logger().info("NavigateToPose action client created.")
+        self._check_nav_server_ready()
+
         # --- Subscribers ---
         self.path_subscriber = self.create_subscription(
             Path,
             '/planned_path',
             self.path_callback,
             10)
-        
-        self.odom_subscriber = self.create_subscription(
-            Odometry,
-            '/mobile_base_controller/odom',
-            self.odom_callback,
-            10)
-            
-        # --- Publisher ---
-        self.velocity_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # --- Control Loop Timer ---
-        self.control_timer = self.create_timer(0.1, self.control_loop) # 10 Hz loop
+        # --- Single timer for managing navigation flow ---
+        self.navigation_timer = self.create_timer(0.5, self.navigation_state_machine)
+
+        # --- State machine states ---
+        self.state = 'IDLE'  # IDLE, NAVIGATING, RETRY_WAIT, MOVING_TO_NEXT
+
+    def _check_nav_server_ready(self, timeout_sec=5.0):
+        """Checks if the Nav2 action server is ready, waits if necessary."""
+        if not self._nav_action_client.server_is_ready():
+            self.get_logger().warn("NavigateToPose action server not available. Waiting...")
+            if not self._nav_action_client.wait_for_server(timeout_sec=timeout_sec):
+                self.get_logger().error("NavigateToPose action server not available after timeout.")
+                return False
+            self.get_logger().info("NavigateToPose action server is ready.")
+        return True
 
     def path_callback(self, msg: Path):
-        """Receives a new path and resets the path-following logic."""
+        """Receives a new path and starts navigation to the first waypoint."""
         self.get_logger().info(f"New path with {len(msg.poses)} waypoints received.")
-        if len(msg.poses) > 0:
+        
+        # Cancel any ongoing navigation
+        if self.is_navigating and self.current_goal_handle:
+            self.get_logger().info("Canceling current navigation goal.")
+            self.current_goal_handle.cancel_goal_async()
+
+        # Reset state
+        self.is_navigating = False
+        self.current_goal_handle = None
+        self.retry_count = 0
+
+        if msg.poses:
             self.current_path = msg.poses
             self.target_waypoint_index = 0
+            self.state = 'MOVING_TO_NEXT'
         else:
             self.current_path = []
-            self.stop_robot()
+            self.state = 'IDLE'
+            self.get_logger().info("Empty path received, stopping navigation.")
 
-    def odom_callback(self, msg: Odometry):
-        """Updates the robot's current position and orientation."""
-        self.current_pose = msg.pose.pose
-
-    def control_loop(self):
-        """The main logic for the controller (currently, path following)."""
-        # --- Guard Clauses: Check if we are ready to follow a path ---
-        if self.current_pose is None:
-            self.get_logger().warn("Waiting for odometry data...", throttle_duration_sec=5)
+    def navigation_state_machine(self):
+        """State machine to handle navigation flow."""
+        if self.state == 'IDLE':
             return
-
-        if not self.current_path:
-            return # No active path, so we do nothing.
+        
+        if self.state == 'MOVING_TO_NEXT':
+            if not self.current_path or self.target_waypoint_index >= len(self.current_path):
+                self.get_logger().info("All waypoints completed or no valid waypoints.")
+                self.state = 'IDLE'
+                self.current_path = []
+                return
             
-        if self.target_waypoint_index >= len(self.current_path):
-            self.get_logger().info("End of path reached.")
-            self.stop_robot()
-            self.current_path = [] # Clear the path so we don't restart
-            return
+            if self.start_navigation_to_current_waypoint():
+                self.state = 'NAVIGATING'
+                self.goal_start_time = time.time()
+            else:
+                self.handle_navigation_failure()
+        
+        elif self.state == 'NAVIGATING':
+            timeout = self.get_parameter('navigation_timeout').value
+            if self.goal_start_time and (time.time() - self.goal_start_time) > timeout:
+                self.get_logger().warn("Navigation timeout reached, canceling goal.")
+                if self.current_goal_handle:
+                    self.current_goal_handle.cancel_goal_async()
+                self.handle_navigation_failure()
+        # RETRY_WAIT is timer-driven; no action here
 
-        # --- Get the current target waypoint ---
+    def start_navigation_to_current_waypoint(self):
+        """Start navigation to the current target waypoint."""
+        if not self.current_path or self.target_waypoint_index >= len(self.current_path):
+            return False
+
+        if not self._check_nav_server_ready(timeout_sec=1.0):
+            self.get_logger().error("Navigation server not ready, cannot send goal.")
+            return False
+
         target_waypoint = self.current_path[self.target_waypoint_index]
-        target_pos = target_waypoint.pose.position
-        current_pos = self.current_pose.position
-        
-        # --- Calculate distance to the target waypoint ---
-        dx = target_pos.x - current_pos.x
-        dy = target_pos.y - current_pos.y
-        distance_to_target = math.sqrt(dx**2 + dy**2)
-        
-        # --- Check if we have reached the waypoint ---
-        goal_tolerance = self.get_parameter('goal_tolerance').get_parameter_value().double_value
-        if distance_to_target < goal_tolerance:
-            self.get_logger().info(f"Waypoint {self.target_waypoint_index} reached.")
+
+        # Compute orientation to face toward next waypoint
+        if self.target_waypoint_index > 0:
+            prev_waypoint = self.current_path[self.target_waypoint_index - 1]
+        else:
+            prev_waypoint = None
+        yaw = _compute_yaw_towards(target_waypoint, prev_waypoint)
+        orientation = _yaw_to_quaternion(yaw)
+
+        x = target_waypoint.pose.position.x
+        y = target_waypoint.pose.position.y
+        yaw_deg = math.degrees(yaw)
+        retry_info = f" (retry {self.retry_count + 1}/{self.max_retries})" if self.retry_count > 0 else ""
+        self.get_logger().info(
+            f"Navigating to waypoint {self.target_waypoint_index + 1}/{len(self.current_path)}: "
+            f"x={x:.2f}, y={y:.2f}, theta={yaw_deg:.2f}°{retry_info}"
+        )
+
+        goal_msg = NavigateToPose.Goal()
+        goal_pose = PoseStamped()
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.header.frame_id = target_waypoint.header.frame_id
+        goal_pose.pose.position = Point(x=float(x), y=float(y), z=0.0)
+        goal_pose.pose.orientation = orientation
+        goal_msg.pose = goal_pose
+
+        try:
+            self.is_navigating = True
+            send_goal_future = self._nav_action_client.send_goal_async(goal_msg)
+            send_goal_future.add_done_callback(self.goal_response_callback)
+            return True
+        except Exception as e:
+            self.get_logger().error(f"Error sending navigation goal: {e}")
+            self.is_navigating = False
+            return False
+
+    def goal_response_callback(self, future):
+        """Callback for when the goal is accepted or rejected."""
+        try:
+            goal_handle = future.result()
+            if not goal_handle.accepted:
+                self.get_logger().error('Navigation goal was rejected by the server.')
+                self.is_navigating = False
+                self.handle_navigation_failure()
+                return
+
+            self.get_logger().info('Navigation goal accepted by server.')
+            self.current_goal_handle = goal_handle
+            get_result_future = goal_handle.get_result_async()
+            get_result_future.add_done_callback(self.goal_result_callback)
+        except Exception as e:
+            self.get_logger().error(f"Error in goal response callback: {e}")
+            self.is_navigating = False
+            self.handle_navigation_failure()
+
+    def goal_result_callback(self, future):
+        """Callback for when navigation goal is completed."""
+        try:
+            result = future.result()
+            status = result.status
+            self.is_navigating = False
+            self.current_goal_handle = None
+
+            if status == GoalStatus.STATUS_SUCCEEDED:
+                self.get_logger().info(f'Navigation to waypoint {self.target_waypoint_index + 1} succeeded!')
+                self.target_waypoint_index += 1
+                self.retry_count = 0
+                if self.target_waypoint_index < len(self.current_path):
+                    self.get_logger().info("Moving to next waypoint...")
+                    self.state = 'MOVING_TO_NEXT'
+                else:
+                    self.get_logger().info("All waypoints reached! Path navigation completed.")
+                    self.current_path = []
+                    self.state = 'IDLE'
+            elif status == GoalStatus.STATUS_CANCELED:
+                self.get_logger().info('Navigation goal was canceled.')
+                self.state = 'IDLE'
+            elif status == GoalStatus.STATUS_ABORTED:
+                self.get_logger().error('Navigation goal was aborted.')
+                self.handle_navigation_failure()
+            else:
+                self.get_logger().error(f'Navigation goal failed with status: {status}')
+                self.handle_navigation_failure()
+        except Exception as e:
+            self.get_logger().error(f"Error in goal result callback: {e}")
+            self.is_navigating = False
+            self.handle_navigation_failure()
+
+    def handle_navigation_failure(self):
+        """Handle navigation failure with retry logic."""
+        if self.retry_count < self.max_retries:
+            self.retry_count += 1
+            self.get_logger().warn(
+                f"Navigation failed, retrying in {self.retry_delay} seconds... (attempt {self.retry_count}/{self.max_retries})"
+            )
+            self.create_timer(self.retry_delay, self.retry_navigation, clock=self.get_clock())
+            self.state = 'RETRY_WAIT'
+        else:
+            self.get_logger().error(
+                f"Max retry attempts ({self.max_retries}) reached for waypoint {self.target_waypoint_index + 1}. Skipping to next waypoint."
+            )
             self.target_waypoint_index += 1
-            return
+            self.retry_count = 0
+            if self.target_waypoint_index < len(self.current_path):
+                self.state = 'MOVING_TO_NEXT'
+            else:
+                self.get_logger().info("No more waypoints, navigation completed with errors.")
+                self.state = 'IDLE'
+                self.current_path = []
 
-        # --- Calculate required heading (angle) to the target ---
-        angle_to_target = math.atan2(dy, dx)
-        
-        # --- Get the robot's current heading (yaw) ---
-        _, _, current_yaw = euler_from_quaternion(self.current_pose.orientation)
-        
-        # --- Calculate the error in heading ---
-        angle_error = angle_to_target - current_yaw
-        angle_error = math.atan2(math.sin(angle_error), math.cos(angle_error)) # Normalize
+    def retry_navigation(self):
+        """Called after retry delay to attempt navigation again."""
+        if self.state == 'RETRY_WAIT':
+            self.state = 'MOVING_TO_NEXT'
 
-        # --- Calculate control commands using a Proportional (P) controller ---
-        kp_linear = self.get_parameter('kp_linear').get_parameter_value().double_value
-        kp_angular = self.get_parameter('kp_angular').get_parameter_value().double_value
-        max_linear = self.get_parameter('max_linear_speed').get_parameter_value().double_value
-        max_angular = self.get_parameter('max_angular_speed').get_parameter_value().double_value
-
-        angular_vel = kp_angular * angle_error
-        linear_vel = kp_linear * distance_to_target if abs(angle_error) < math.pi / 4 else 0.0
-
-        # --- Clamp velocities to their maximum values ---
-        linear_vel = np.clip(linear_vel, -max_linear, max_linear)
-        angular_vel = np.clip(angular_vel, -max_angular, max_angular)
-        
-        # --- Publish the velocity command ---
-        twist_msg = Twist()
-        twist_msg.linear.x = linear_vel
-        twist_msg.angular.z = angular_vel
-        self.velocity_publisher.publish(twist_msg)
-
-    def stop_robot(self):
-        """Publishes a zero-velocity command to stop the robot."""
-        self.get_logger().info("Publishing stop command.")
-        stop_msg = Twist()
-        self.velocity_publisher.publish(stop_msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    controller_node = Controller()
+    controller_node = SimpleNavigationController()
     try:
         rclpy.spin(controller_node)
     except KeyboardInterrupt:
-        pass
+        controller_node.get_logger().info("KeyboardInterrupt received, shutting down.")
     finally:
-        controller_node.stop_robot()
+        if controller_node.is_navigating and controller_node.current_goal_handle:
+            controller_node.get_logger().info("Canceling navigation goal during shutdown.")
+            controller_node.current_goal_handle.cancel_goal_async()
         controller_node.destroy_node()
         rclpy.shutdown()
 
