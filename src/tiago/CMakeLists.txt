@@ -129,6 +129,12 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME conversation_node
 )
+install(PROGRAMS
+  ${PROJECT_NAME}/reasoning_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME reasoning_node
+)
+
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}

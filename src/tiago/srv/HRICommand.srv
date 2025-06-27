@@ -1,0 +1,7 @@
+string command         # Command type: "start_conversation", "stop_conversation",
+                      # "pause_conversation", "resume_conversation"
+string person_id      # ID of person to interact with
+string category       # Person category for conversation adaptation ( "customer","staff","unknown" )
+---
+# Response
+bool success          # Whether the command was accepted

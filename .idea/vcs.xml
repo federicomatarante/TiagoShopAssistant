@@ -2,5 +2,9 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/pal_gazebo_worlds" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/tiago_navigation" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/tiago_robot" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/tiago_simulation" vcs="Git" />
   </component>
 </project>

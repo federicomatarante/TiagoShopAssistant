@@ -1,0 +1,5 @@
+# Request
+string command          # Command type: "random_walk", "stop_movement", "go_to_location"
+geometry_msgs/Point location   # Target location (used with "go_to_location")
+---
+bool success           # Whether the command was accepted
