@@ -6,6 +6,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
 from geometry_msgs.msg import Point, PointStamped
+from tiago.msg import VisionPersonDetection
 from tf2_ros import TransformListener, Buffer
 import tf2_geometry_msgs
 from cv_bridge import CvBridge
@@ -40,6 +41,10 @@ class VisionController(Node):
         self.next_person_id = 1
         self.person_timeout = 5.0  # seconds
         
+        # AprilTag-based unique person tracking
+        self.apriltag_to_person = {}  # apriltag_id -> unique_person_id
+        self.unique_persons = {}  # unique_person_id -> person_data
+        
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
             Image,
@@ -63,7 +68,7 @@ class VisionController(Node):
             
         # Publisher for detection results
         self.result_publisher = self.create_publisher(
-            String,
+            VisionPersonDetection,
             '/person_detection',
             10)
         
@@ -242,6 +247,57 @@ class VisionController(Node):
         person_depth = np.median(valid_depths)
 
         return float(person_depth) 
+
+    def get_or_create_unique_person(self, apriltag_id, person_data):
+        """Get or create unique person identity based on AprilTag ID"""
+        if apriltag_id in self.apriltag_to_person:
+            # Update existing person
+            unique_id = self.apriltag_to_person[apriltag_id]
+            self.unique_persons[unique_id].update({
+                'last_seen': time.time(),
+                'position': person_data.get('world_position'),
+                'pixel_position': person_data.get('pixel_position'),
+                'depth': person_data.get('depth'),
+                'confidence': person_data.get('confidence')
+            })
+            return unique_id, False  # False = not new
+        else:
+            # Create new unique person
+            unique_id = f"person_{apriltag_id}"
+            self.apriltag_to_person[apriltag_id] = unique_id
+            self.unique_persons[unique_id] = {
+                'person_id': person_data.get('name', unique_id),
+                'cls': person_data.get('person_type', 'unknown'),
+                'apriltag_id': apriltag_id,
+                'first_seen': time.time(),
+                'last_seen': time.time(),
+                'position': person_data.get('world_position'),
+                'pixel_position': person_data.get('pixel_position'),
+                'depth': person_data.get('depth'),
+                'confidence': person_data.get('confidence')
+            }
+            return unique_id, True  # True = is new
+
+    def should_publish_person_update(self, unique_id, is_new_person):
+        """Determine if person update should be published (avoid spam)"""
+        person = self.unique_persons.get(unique_id)
+        if not person:
+            return False
+            
+        # Always publish new persons immediately
+        if is_new_person:
+            person['last_publish'] = time.time()
+            return True
+            
+        # For existing persons, publish every 2 seconds
+        current_time = time.time()
+        last_publish = person.get('last_publish', 0)
+        
+        if current_time - last_publish > 2.0:  # 2 second interval
+            person['last_publish'] = current_time
+            return True
+            
+        return False
 
     def get_depth_at_point(self, u, v, depth_image):
         """Get depth value at specific pixel coordinates"""
@@ -506,25 +562,40 @@ class VisionController(Node):
                         msg.header.stamp
                     )
                     
-                    # Publish result (ALWAYS)
-                    result_msg = String()
-                    result_msg.data = json.dumps(result)
-                    self.result_publisher.publish(result_msg)
-                    
-                    # Log result only when should_log
-                    if should_log:
-                        person_type = result['person_type']
-                        name = result.get('name', 'Unknown')
-                        method = result.get('detection_method', 'unknown')
-                        confidence = result.get('confidence', 0.0)
-                        tag_id = result.get('tag_id', 'None')
-                        world_pos = result.get('world_position', None)
-                        depth = result.get('depth', None)
-                        pixel_pos = result.get('pixel_position', 'None')
+                    # Only track and publish persons with AprilTags (for unique identity)
+                    if match['tag'] and 'tag_id' in result:
+                        apriltag_id = result['tag_id']
+                        unique_id, is_new = self.get_or_create_unique_person(apriltag_id, result)
                         
-                        self.get_logger().info(f'Classified {person_type}: {name} (method: {method}, tag_id: {tag_id}, confidence: {confidence:.2f})')
-                        self.get_logger().info(f'  Pixel: {pixel_pos}, Depth: {depth:.3f}m' if depth else f'  Pixel: {pixel_pos}, Depth: None')
-                        self.get_logger().info(f'  World Position: [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]' if world_pos else '  World Position: None')
+                        # Only publish if it's a new person or if enough time has passed
+                        if self.should_publish_person_update(unique_id, is_new):
+                            person_data = self.unique_persons[unique_id]
+                            
+                            result_msg = VisionPersonDetection()
+                            result_msg.person_id = person_data['person_id']
+                            result_msg.cls = person_data['cls']
+                            
+                            # Set 3D position
+                            result_msg.position = Point()
+                            world_pos = person_data.get('position')
+                            if world_pos and len(world_pos) >= 3:
+                                result_msg.position.x = float(world_pos[0])
+                                result_msg.position.y = float(world_pos[1])
+                                result_msg.position.z = float(world_pos[2])
+                            else:
+                                result_msg.position.x = 0.0
+                                result_msg.position.y = 0.0
+                                result_msg.position.z = 0.0
+                            
+                            self.result_publisher.publish(result_msg)
+                            
+                            if should_log:
+                                status = "NEW" if is_new else "UPDATE"
+                                self.get_logger().info(f'{status} Person: {person_data["person_id"]} (AprilTag {apriltag_id}) at [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]' if world_pos else f'{status} Person: {person_data["person_id"]} (AprilTag {apriltag_id}) - no position')
+                    else:
+                        # Handle persons without AprilTags (don't publish to avoid duplicates)
+                        if should_log:
+                            self.get_logger().info(f'Person detected without AprilTag - not publishing to avoid duplicates')
 
             elif len(detected_tags) > 0 and should_log:
                 self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s)')
