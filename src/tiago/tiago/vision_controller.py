@@ -30,7 +30,7 @@ class VisionController(Node):
         # Camera intrinsics (will be updated from camera_info)
         self.camera_intrinsics = None
         self.camera_frame = 'head_front_camera_color_optical_frame'
-        self.world_frame = 'base_link'
+        self.world_frame = 'odom'
 
         # TF2 setup for coordinate transformations
         self.tf_buffer = Buffer()
