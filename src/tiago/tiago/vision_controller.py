@@ -181,25 +181,53 @@ class VisionController(Node):
         return [x_cam, y_cam, z_cam]
 
     def transform_to_world_coordinates(self, camera_point, timestamp):
-        """Transform 3D camera coordinates to world coordinates"""
+        """Transform 3D camera coordinates to world coordinates with robust TF handling"""
         if camera_point is None:
             return None
         try:
-            # Get the latest available transform time
-            latest_time = self.tf_buffer.get_latest_common_time(self.camera_frame, self.world_frame)
+            # Try multiple approaches for robust transformation
             
-            # Create a PointStamped in camera frame
-            point_camera = PointStamped()
-            point_camera.header.frame_id = self.camera_frame
-            point_camera.header.stamp = latest_time.to_msg()
-            point_camera.point.x = camera_point[0]
-            point_camera.point.y = camera_point[1]
-            point_camera.point.z = camera_point[2]
-
-            # Transform to world coordinates
-            point_world = self.tf_buffer.transform(point_camera, self.world_frame)
-
-            return [point_world.point.x, point_world.point.y, point_world.point.z]
+            # Approach 1: Use image timestamp with tolerance
+            try:
+                point_camera = PointStamped()
+                point_camera.header.frame_id = self.camera_frame
+                point_camera.header.stamp = timestamp
+                point_camera.point.x = camera_point[0]
+                point_camera.point.y = camera_point[1]
+                point_camera.point.z = camera_point[2]
+                
+                # Transform with timeout for timestamp matching
+                from rclpy.duration import Duration
+                timeout = Duration(seconds=0.1)
+                point_world = self.tf_buffer.transform(point_camera, self.world_frame, timeout)
+                
+                # Debug: Log successful transform method
+                self.get_logger().debug(f'Transform success: Using image timestamp approach')
+                return [point_world.point.x, point_world.point.y, point_world.point.z]
+                
+            except Exception as e1:
+                self.get_logger().debug(f'Image timestamp transform failed: {e1}')
+                
+                # Approach 2: Use latest common time
+                try:
+                    latest_time = self.tf_buffer.get_latest_common_time(self.camera_frame, self.world_frame)
+                    
+                    point_camera.header.stamp = latest_time.to_msg()
+                    point_world = self.tf_buffer.transform(point_camera, self.world_frame)
+                    return [point_world.point.x, point_world.point.y, point_world.point.z]
+                    
+                except Exception as e2:
+                    self.get_logger().debug(f'Latest time transform failed: {e2}')
+                    
+                    # Approach 3: Use zero timestamp (latest available)
+                    try:
+                        from rclpy.time import Time
+                        point_camera.header.stamp = Time().to_msg()  # Zero time = latest
+                        point_world = self.tf_buffer.transform(point_camera, self.world_frame)
+                        return [point_world.point.x, point_world.point.y, point_world.point.z]
+                        
+                    except Exception as e3:
+                        raise Exception(f'All transform approaches failed: {e1}, {e2}, {e3}')
         
         except Exception as e:
             self.get_logger().error(f'Error transforming to world coordinates: {e}')
@@ -458,14 +486,15 @@ class VisionController(Node):
             tag_data = self.tag_mapping[tag_info['id']]
             confidence = min(0.95, max(0.5, tag_info['confidence'] / 50.0))  # Normalize confidence
             
-            # Calculate world coordinates
-            person_center_u = x + w // 2
-            person_center_v = y + h // 2
-            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
+            # Calculate world coordinates using AprilTag center for better precision
+            tag_center_u = int(tag_info['center'][0])
+            tag_center_v = int(tag_info['center'][1])
+            # Get depth at AprilTag location instead of person center
+            person_depth = self.get_depth_at_point(tag_center_u, tag_center_v, self.current_depth_image)
 
             world_coords = None
             if person_depth is not None:
-                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
+                camera_coords = self.pixel_to_3d_camera(tag_center_u, tag_center_v, person_depth)
                 if camera_coords is not None and timestamp is not None:
                     world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
 
@@ -483,14 +512,15 @@ class VisionController(Node):
             }
         elif tag_info:
             # AprilTag detected but unknown ID
-            # Calculate world coordinates
-            person_center_u = x + w // 2
-            person_center_v = y + h // 2
-            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
+            # Calculate world coordinates using AprilTag center for better precision
+            tag_center_u = int(tag_info['center'][0])
+            tag_center_v = int(tag_info['center'][1])
+            # Get depth at AprilTag location instead of person center
+            person_depth = self.get_depth_at_point(tag_center_u, tag_center_v, self.current_depth_image)
 
             world_coords = None
             if person_depth is not None:
-                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
+                camera_coords = self.pixel_to_3d_camera(tag_center_u, tag_center_v, person_depth)
                 if camera_coords is not None and timestamp is not None:
                     world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
             return {
