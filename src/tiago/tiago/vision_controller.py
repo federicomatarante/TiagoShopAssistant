@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rclpy.duration import Duration
-from rclpy.time import Time
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import String
-from geometry_msgs.msg import Point, PointStamped
+from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.srv import GetEntityState, GetModelList
 from tiago.msg import VisionPersonDetection
-from tf2_ros import TransformListener, Buffer
-import tf2_geometry_msgs
+from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
-import json
 import numpy as np
 import cv2
 import apriltag
@@ -25,16 +21,17 @@ class VisionController(Node):
         self.bridge = CvBridge()
 
         self.log_counter = 0
-        self.current_depth_image = None
 
-        # Camera intrinsics (will be updated from camera_info)
-        self.camera_intrinsics = None
-        self.camera_frame = 'head_front_camera_color_optical_frame'
-        self.world_frame = 'odom'
-
-        # TF2 setup for coordinate transformations
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        # Gazebo model states for position lookup
+        self.model_states = None
+        
+        # Gazebo service clients (reliable method)
+        self.gazebo_get_entity_client = self.create_client(GetEntityState, 'get_entity_state')
+        self.gazebo_get_model_list_client = self.create_client(GetModelList, 'get_model_list')
+        
+        # Cache for model list to avoid repeated service calls
+        self.cached_model_list = None
+        self.model_list_cache_time = 0
 
         # Person tracking storage
         self.tracked_persons = {}  # person_id -> PersonTracker
@@ -52,18 +49,11 @@ class VisionController(Node):
             self.image_callback,
             10)
 
-        # Subscription to TIAGo's depth camera
-        self.depth_subscription = self.create_subscription(
-            Image,
-            '/head_front_camera/depth/image_raw',
-            self.depth_callback,
-            10)
-        
-        # Subscription to camera info for intrinsics
-        self.camera_info_subscription = self.create_subscription(
-            CameraInfo,
-            '/head_front_camera/rgb/camera_info',
-            self.camera_info_callback,
+        # Subscribe to Gazebo model states for perfect position data
+        self.gazebo_subscription = self.create_subscription(
+            ModelStates,
+            '/model_states',
+            self.gazebo_callback,
             10)
             
         # Publisher for detection results
@@ -91,14 +81,14 @@ class VisionController(Node):
         # AprilTag detection
         self.apriltag_detector = apriltag.Detector()
         
-        # Tag ID mapping - unique person IDs
+        # Tag ID mapping - maps AprilTag IDs to Gazebo model names
         self.tag_mapping = {
-            1: {'type': 'staff', 'name': 'staff_leonardo'},
-            2: {'type': 'staff', 'name': 'staff_lorenzo'},
-            3: {'type': 'staff', 'name': 'staff_federico'},
-            4: {'type': 'customer', 'name': 'customer_emanuele'},
-            5: {'type': 'customer', 'name': 'customer_niccolo'},
-            6: {'type': 'customer', 'name': 'customer_antonello'}
+            1: {'type': 'staff', 'name': 'staff_leonardo', 'gazebo_model': 'staff_leonardo'},
+            2: {'type': 'staff', 'name': 'staff_lorenzo', 'gazebo_model': 'staff_lorenzo'},
+            3: {'type': 'staff', 'name': 'staff_federico', 'gazebo_model': 'staff_federico'},
+            4: {'type': 'customer', 'name': 'customer_emanuele', 'gazebo_model': 'customer_emanuele'},
+            5: {'type': 'customer', 'name': 'customer_niccolo', 'gazebo_model': 'customer_niccolo'},
+            6: {'type': 'customer', 'name': 'customer_antonello', 'gazebo_model': 'customer_antonello'}
         }
         
         self.get_logger().info('AprilTag detector initialized')
@@ -120,161 +110,118 @@ class VisionController(Node):
             self.get_logger().error(f'Error initializing person detector: {e}')
             return None
 
-    def depth_callback(self, msg):
-        """Process incoming depth images"""
-        try:
-            # Convert ROS Image message to OpenCV format
-            # Depth images can be in different formats (16UC1, 32FC1)
-            if msg.encoding == '16UC1':
-                # 16-bit unsigned integer (millimeters)
-                depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
-                # Convert to meters
-                depth_image = depth_image.astype(np.float32) / 1000.0
-            elif msg.encoding == '32FC1':
-                # 32-bit float (meters)
-                depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
-            else:
-                self.get_logger().error(f'Unsupported depth image encoding: {msg.encoding}')
-                return
+    def gazebo_callback(self, msg):
+        """Process Gazebo model states for perfect position data"""
+        self.model_states = msg
 
-            # Store the depth image for use in RGB processing
-            self.current_depth_image = depth_image
-
-        except Exception as e:
-            self.get_logger().error(f'Error in depth callback: {e}')
-
-    def camera_info_callback(self, msg):
-        """Process camera intrinsics parameters"""
-        if self.camera_intrinsics is None:
-            # Extract camera intrinsics from CameraInfo message
-            self.camera_intrinsics = {
-                'fx': msg.k[0],  # Focal length x
-                'fy': msg.k[4],  # Focal length y
-                'cx': msg.k[2],  # Principal point x
-                'cy': msg.k[5],  # Principal point y
-                'width': msg.width,
-                'height': msg.height
-            }
-            self.get_logger().info(f'Camera intrinsics loaded: fx={self.camera_intrinsics["fx"]:.1f}, fy={self.camera_intrinsics["fy"]:.1f}')
-
-            # Unsubscribe after getting intrinsics (they are static )
-            self.destroy_subscription(self.camera_info_subscription)
- 
-    def pixel_to_3d_camera(self, u, v, depth):
-        """Convert pixel coordinates + depth to 3D camera coordinates"""
-        if self.camera_intrinsics is None or depth is None or depth <= 0:
-            return None
-
-        # Convert pixel coordinates to 3D camera coordinates
-        # Using pinhole camera model: X = (u - cx) * Z / fx, Y = (v - cy) * Z / fy
-        fx = self.camera_intrinsics['fx']
-        fy = self.camera_intrinsics['fy']
-        cx = self.camera_intrinsics['cx']
-        cy = self.camera_intrinsics['cy']
-
-        # 3D point in camera optical coordinate frame
-        # In optical frame: X=right, Y=down, Z=forward
-        x_cam = (u - cx) * depth / fx
-        y_cam = (v - cy) * depth / fy
-        z_cam = depth 
-
-        return [x_cam, y_cam, z_cam]
-
-    def transform_to_world_coordinates(self, camera_point, timestamp):
-        """Transform 3D camera coordinates to world coordinates with robust TF handling"""
-        if camera_point is None:
-            return None
-        try:
-            # Try multiple approaches for robust transformation
+    def get_model_list_from_gazebo_cached(self):
+        """Get cached model list from Gazebo (refresh every 10 seconds)"""
+        current_time = time.time()
+        
+        # Use cached list if recent (models don't change often)
+        if (self.cached_model_list is not None and 
+            current_time - self.model_list_cache_time < 10.0):
+            return self.cached_model_list
             
-            # Approach 1: Use image timestamp with tolerance
-            try:
-                point_camera = PointStamped()
-                point_camera.header.frame_id = self.camera_frame
-                point_camera.header.stamp = timestamp
-                point_camera.point.x = camera_point[0]
-                point_camera.point.y = camera_point[1]
-                point_camera.point.z = camera_point[2]
+        # Refresh cache
+        try:
+            self.get_logger().info('🔍 DEBUG: Checking if get_model_list service is ready...')
+            if not self.gazebo_get_model_list_client.service_is_ready():
+                self.get_logger().error('❌ Gazebo get_model_list service not ready')
+                return self.cached_model_list  # Return old cache if available
+            
+            self.get_logger().info('✅ DEBUG: Service is ready, making call...')
                 
-                # Transform with timeout for timestamp matching
-                from rclpy.duration import Duration
-                timeout = Duration(seconds=0.1)
-                point_world = self.tf_buffer.transform(point_camera, self.world_frame, timeout)
-                
-                # Debug: Log successful transform method
-                self.get_logger().debug(f'Transform success: Using image timestamp approach')
-                return [point_world.point.x, point_world.point.y, point_world.point.z]
-                
-            except Exception as e1:
-                self.get_logger().debug(f'Image timestamp transform failed: {e1}')
-                
-                # Approach 2: Use latest common time
-                try:
-                    latest_time = self.tf_buffer.get_latest_common_time(self.camera_frame, self.world_frame)
+            request = GetModelList.Request()
+            future = self.gazebo_get_model_list_client.call_async(request)
+            
+            # Use reasonable timeout for model list
+            start_time = time.time()
+            self.get_logger().info('🔄 DEBUG: Starting service call wait loop...')
+            while not future.done() and (time.time() - start_time) < 2.0:
+                rclpy.spin_once(self, timeout_sec=0.01)
+            
+            elapsed = time.time() - start_time
+            self.get_logger().info(f'⏱️  DEBUG: Wait loop finished. Elapsed: {elapsed:.3f}s, Done: {future.done()}')
+            
+            if future.done() and future.result() is not None:
+                response = future.result()
+                if response.success:
+                    self.cached_model_list = response.model_names
+                    self.model_list_cache_time = current_time
+                    return self.cached_model_list
                     
-                    point_camera.header.stamp = latest_time.to_msg()
-                    point_world = self.tf_buffer.transform(point_camera, self.world_frame)
-                    return [point_world.point.x, point_world.point.y, point_world.point.z]
-                    
-                except Exception as e2:
-                    self.get_logger().debug(f'Latest time transform failed: {e2}')
-                    
-                    # Approach 3: Use zero timestamp (latest available)
-                    try:
-                        from rclpy.time import Time
-                        point_camera.header.stamp = Time().to_msg()  # Zero time = latest
-                        point_world = self.tf_buffer.transform(point_camera, self.world_frame)
-                        return [point_world.point.x, point_world.point.y, point_world.point.z]
-                        
-                    except Exception as e3:
-                        raise Exception(f'All transform approaches failed: {e1}, {e2}, {e3}')
-        
+            self.get_logger().warn('⚠️  Model list service call failed/timeout')
+            return self.cached_model_list  # Return old cache if available
+                
         except Exception as e:
-            self.get_logger().error(f'Error transforming to world coordinates: {e}')
+            self.get_logger().error(f'💥 Error getting model list: {e}')
+            return self.cached_model_list
+
+    def get_position_from_gazebo_service(self, model_name):
+        """Get position using Gazebo service call (non-blocking method)"""
+        try:
+            # Check if model exists (using cached list)
+            model_list = self.get_model_list_from_gazebo_cached()
+            if model_list and model_name not in model_list:
+                self.get_logger().debug(f'Model {model_name} not found in cached list')
+                return None
+            
+            # Get entity state - but don't wait if service isn't ready
+            if not self.gazebo_get_entity_client.service_is_ready():
+                self.get_logger().debug('get_entity_state service not ready')
+                return None
+                
+            request = GetEntityState.Request()
+            request.name = model_name
+            request.reference_frame = 'world'
+            
+            future = self.gazebo_get_entity_client.call_async(request)
+            
+            # Reasonable timeout for service calls
+            start_time = time.time()
+            while not future.done() and (time.time() - start_time) < 2.0:
+                rclpy.spin_once(self, timeout_sec=0.01)
+            
+            if future.done() and future.result() is not None:
+                response = future.result()
+                if response.success:
+                    pos = response.state.pose.position
+                    position = [pos.x, pos.y, pos.z]
+                    self.get_logger().info(f'✅ GAZEBO SERVICE: {model_name} at [{position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f}]')
+                    return position
+                else:
+                    self.get_logger().debug(f'Service call failed for {model_name}')
+                    return None
+            else:
+                self.get_logger().debug(f'Service timeout for {model_name}')
+                return None
+                
+        except Exception as e:
+            self.get_logger().debug(f'Service error for {model_name}: {e}')
             return None
 
-    def get_person_depth(self, person_rect, depth_image):
-        """Extract reliable depth measurement for a detected person"""
-        if depth_image is None:
-            return None
-
-        x, y, w, h = person_rect
-
-        # Define sampling region - focus on person's torso area
-        # Avoid edges where background might leak in
-        margin_x = max(1, w // 6) # 16% margin from left/right edges
-        margin_y = max(1, h // 8) # 12% margin from top/bottom edges
-
-        # Sample region: center torso area
-        sample_x1 = x + margin_x
-        sample_x2 = x + w - margin_x
-        sample_y1 = y + margin_y + h // 4  # Start at 25% height - upper torso
-        sample_y2 = y + h - margin_y - h // 4 # End at 75% height - lower torso
-
-        # Ensure bounds are valid
-        sample_x1 = max(0, min(sample_x1, depth_image.shape[1] - 1))
-        sample_x2 = max(sample_x1 + 1, min(sample_x2, depth_image.shape[1]))
-        sample_y1 = max(0, min(sample_y1, depth_image.shape[0] - 1))
-        sample_y2 = max(sample_y1 + 1, min(sample_y2, depth_image.shape[0]))
-
-        # Extract depth values from the sampling region
-        depth_region = depth_image[sample_y1:sample_y2, sample_x1:sample_x2]
+    def get_position_from_gazebo(self, model_name):
+        """Get exact position of a model from Gazebo using model_states topic"""
         
-        # Filter out invalid depth values
-        valid_depths = depth_region[
-          (depth_region > 0.1) &  # Minimum 10cm
-          (depth_region < 10.0) &  # Maximum 10m
-          (~np.isnan(depth_region)) &  # Not NaN
-          (~np.isinf(depth_region))   # Not infinite
-        ]
-
-        if len(valid_depths) == 0:
+        if self.model_states is not None:
+            try:
+                if model_name in self.model_states.name:
+                    index = self.model_states.name.index(model_name)
+                    pose = self.model_states.pose[index]
+                    position = [pose.position.x, pose.position.y, pose.position.z]
+                    return position
+                else:
+                    self.get_logger().debug(f'Model {model_name} not found in Gazebo')
+                    return None
+            except Exception as e:
+                self.get_logger().error(f'Error getting position for {model_name}: {e}')
+                return None
+        else:
             return None
+ 
 
-        # Use median depth for robustness against outliers
-        person_depth = np.median(valid_depths)
-
-        return float(person_depth) 
+ 
 
     def get_or_create_unique_person(self, apriltag_id, person_data):
         """Get or create unique person identity based on AprilTag ID"""
@@ -327,37 +274,6 @@ class VisionController(Node):
             
         return False
 
-    def get_depth_at_point(self, u, v, depth_image):
-        """Get depth value at specific pixel coordinates"""
-        if depth_image is None:
-            return None
-        
-        # Ensure coordinates are within image bounds
-        h, w = depth_image.shape
-        u = max(0, min(u, w - 1))
-        v = max(0, min(v, h - 1))
-        
-        # Sample a small region around the point for robustness
-        sample_size = 3
-        u_start = max(0, u - sample_size // 2)
-        u_end = min(w, u + sample_size // 2 + 1)
-        v_start = max(0, v - sample_size // 2)
-        v_end = min(h, v + sample_size // 2 + 1)
-        
-        depth_region = depth_image[v_start:v_end, u_start:u_end]
-        
-        # Filter valid depths
-        valid_depths = depth_region[
-            (depth_region > 0.1) &
-            (depth_region < 10.0) &
-            (~np.isnan(depth_region)) &
-            (~np.isinf(depth_region))
-        ]
-        
-        if len(valid_depths) == 0:
-            return None
-            
-        return float(np.median(valid_depths))
 
     def detect_persons(self, image):
         """Detect persons in the given image"""
@@ -477,7 +393,7 @@ class VisionController(Node):
             return 'unknown'
 
     def classify_person_with_tag(self, image, person_rect, tag_info=None, timestamp=None):
-        """Complete pipeline: person -> AprilTag detection -> classification"""
+        """Simplified pipeline: AprilTag -> Classification -> Gazebo Position Lookup"""
         
         x, y, w, h = person_rect
         
@@ -486,17 +402,12 @@ class VisionController(Node):
             tag_data = self.tag_mapping[tag_info['id']]
             confidence = min(0.95, max(0.5, tag_info['confidence'] / 50.0))  # Normalize confidence
             
-            # Calculate world coordinates using AprilTag center for better precision
-            tag_center_u = int(tag_info['center'][0])
-            tag_center_v = int(tag_info['center'][1])
-            # Get depth at AprilTag location instead of person center
-            person_depth = self.get_depth_at_point(tag_center_u, tag_center_v, self.current_depth_image)
-
-            world_coords = None
-            if person_depth is not None:
-                camera_coords = self.pixel_to_3d_camera(tag_center_u, tag_center_v, person_depth)
-                if camera_coords is not None and timestamp is not None:
-                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
+            # Get exact position from Gazebo using model name
+            gazebo_model_name = tag_data['gazebo_model']
+            world_coords = self.get_position_from_gazebo(gazebo_model_name)
+            
+            if not world_coords:
+                self.get_logger().debug(f'No position data available for {gazebo_model_name}')
 
             return {
                 'person_type': tag_data['type'],
@@ -505,55 +416,30 @@ class VisionController(Node):
                 'confidence': confidence,
                 'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
                 'world_position': world_coords,
-                'depth': person_depth,
                 'tag_center': tag_info['center'].tolist(),
                 'tag_confidence': tag_info['confidence'],
-                'detection_method': 'apriltag'
+                'detection_method': 'gazebo_lookup'
             }
         elif tag_info:
             # AprilTag detected but unknown ID
-            # Calculate world coordinates using AprilTag center for better precision
-            tag_center_u = int(tag_info['center'][0])
-            tag_center_v = int(tag_info['center'][1])
-            # Get depth at AprilTag location instead of person center
-            person_depth = self.get_depth_at_point(tag_center_u, tag_center_v, self.current_depth_image)
-
-            world_coords = None
-            if person_depth is not None:
-                camera_coords = self.pixel_to_3d_camera(tag_center_u, tag_center_v, person_depth)
-                if camera_coords is not None and timestamp is not None:
-                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
             return {
                 'person_type': 'unknown',
                 'name': f'Unknown Tag ID {tag_info["id"]}',
                 'tag_id': tag_info['id'],
                 'confidence': 0.8,
                 'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'world_position': world_coords,
-                'depth': person_depth,
+                'world_position': None,  # No Gazebo model for unknown tags
                 'tag_center': tag_info['center'].tolist(),
                 'detection_method': 'apriltag_unknown'
             }
         else:
-            # No AprilTag detected
-            # Calculate world coordinates
-            person_center_u = x + w // 2
-            person_center_v = y + h // 2
-            person_depth = self.get_person_depth(person_rect, self.current_depth_image)
-
-            world_coords = None
-            if person_depth is not None:
-                camera_coords = self.pixel_to_3d_camera(person_center_u, person_center_v, person_depth)
-                if camera_coords is not None and timestamp is not None:
-                    world_coords = self.transform_to_world_coordinates(camera_coords, timestamp)
-            
+            # No AprilTag detected - cannot get position without tag
             return {
                 'person_type': 'unknown',
-                'name': 'Person without badge',
+                'name': 'Person without AprilTag',
                 'confidence': 0.3,
                 'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
-                'world_position': world_coords,
-                'depth': person_depth,
+                'world_position': None,  # Cannot determine position without tag
                 'detection_method': 'no_apriltag'
             }
     
@@ -621,7 +507,15 @@ class VisionController(Node):
                             
                             if should_log:
                                 status = "NEW" if is_new else "UPDATE"
-                                self.get_logger().info(f'{status} Person: {person_data["person_id"]} (AprilTag {apriltag_id}) at [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]' if world_pos else f'{status} Person: {person_data["person_id"]} (AprilTag {apriltag_id}) - no position')
+                                if world_pos:
+                                    self.get_logger().info(f'{"="*80}')
+                                    self.get_logger().info(f'{status} PERSON DETECTED: {person_data["person_id"]} (AprilTag {apriltag_id})')
+                                    self.get_logger().info(f'WORLD POSITION: [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]')
+                                    self.get_logger().info(f'{"="*80}')
+                                else:
+                                    self.get_logger().info(f'{"="*80}')
+                                    self.get_logger().info(f'{status} PERSON: {person_data["person_id"]} (AprilTag {apriltag_id}) - NO POSITION')
+                                    self.get_logger().info(f'{"="*80}')
                     else:
                         # Handle persons without AprilTags (don't publish to avoid duplicates)
                         if should_log:

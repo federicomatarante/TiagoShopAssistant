@@ -11,13 +11,21 @@ def download_official_apriltags():
     base_url = "https://raw.githubusercontent.com/AprilRobotics/apriltag-imgs/master/tag36h11/"
     
     tag_urls = {
-        1: f"{base_url}tag36_11_00001.png",  # Staff tag
-        2: f"{base_url}tag36_11_00002.png"   # Customer tag
+        1: f"{base_url}tag36_11_00001.png",  # Staff Leonardo
+        2: f"{base_url}tag36_11_00002.png",  # Staff Lorenzo  
+        3: f"{base_url}tag36_11_00003.png",  # Staff Federico
+        4: f"{base_url}tag36_11_00004.png",  # Customer Emanuele
+        5: f"{base_url}tag36_11_00005.png",  # Customer Niccolo
+        6: f"{base_url}tag36_11_00006.png"   # Customer Antonello
     }
     
     # Create output directories
-    os.makedirs("staff_person/materials/textures", exist_ok=True)
-    os.makedirs("customer_person/materials/textures", exist_ok=True)
+    os.makedirs("staff_leonardo/materials/textures", exist_ok=True)
+    os.makedirs("staff_lorenzo/materials/textures", exist_ok=True)
+    os.makedirs("staff_federico/materials/textures", exist_ok=True)
+    os.makedirs("customer_emanuele/materials/textures", exist_ok=True)
+    os.makedirs("customer_niccolo/materials/textures", exist_ok=True)
+    os.makedirs("customer_antonello/materials/textures", exist_ok=True)
     
     for tag_id, url in tag_urls.items():
         try:
@@ -32,14 +40,30 @@ def download_official_apriltags():
             resized = cv2.resize(img, (200, 200), interpolation=cv2.INTER_NEAREST)
             
             # Save for Gazebo models
-            if tag_id == 1:  # Staff
-                cv2.imwrite("staff_person/materials/textures/tag_1.png", resized)
+            if tag_id == 1:  # Staff Leonardo
+                cv2.imwrite("staff_leonardo/materials/textures/tag_1.png", resized)
                 cv2.imwrite("tag_1.png", resized)  # Backup copy
-                print(f"✓ Staff AprilTag saved to staff_person/materials/textures/tag_1.png")
-            elif tag_id == 2:  # Customer  
-                cv2.imwrite("customer_person/materials/textures/tag_2.png", resized)
+                print(f"AprilTag saved to staff_leonardo/materials/textures/tag_1.png")
+            elif tag_id == 2:  # Staff Lorenzo  
+                cv2.imwrite("staff_lorenzo/materials/textures/tag_2.png", resized)
                 cv2.imwrite("tag_2.png", resized)  # Backup copy
-                print(f"✓ Customer AprilTag saved to customer_person/materials/textures/tag_2.png")
+                print(f"AprilTag saved to staff_lorenzo/materials/textures/tag_2.png")
+            elif tag_id == 3:  # Staff Federico
+                cv2.imwrite("staff_federico/materials/textures/tag_3.png", resized)
+                cv2.imwrite("tag_3.png", resized)  # Backup copy
+                print(f"AprilTag saved to staff_federico/materials/textures/tag_3.png")
+            elif tag_id == 4:  # Customer Emanuele
+                cv2.imwrite("customer_emanuele/materials/textures/tag_4.png", resized)
+                cv2.imwrite("tag_4.png", resized)  # Backup copy
+                print(f"AprilTag saved to customer_emanuele/materials/textures/tag_4.png")
+            elif tag_id == 5:  # Customer Niccolo
+                cv2.imwrite("customer_niccolo/materials/textures/tag_5.png", resized)
+                cv2.imwrite("tag_5.png", resized)  # Backup copy
+                print(f"AprilTag saved to customer_niccolo/materials/textures/tag_5.png")
+            elif tag_id == 6:  # Customer Antonello
+                cv2.imwrite("customer_antonello/materials/textures/tag_6.png", resized)
+                cv2.imwrite("tag_6.png", resized)  # Backup copy
+                print(f"AprilTag saved to customer_antonello/materials/textures/tag_6.png")
             
             # Remove original download
             os.remove(filename)
@@ -97,6 +121,9 @@ if __name__ == "__main__":
     print("1. Official AprilTag images downloaded and resized")
     print("2. Files saved to model texture directories")
     print("3. Vision controller tag mapping:")
-    print("   - ID 1: Staff member")  
-    print("   - ID 2: Customer")
-    print("\nYour vision controller should now detect these tags correctly!")
+    print("   - ID 1: Staff Leonardo")  
+    print("   - ID 2: Staff Lorenzo")
+    print("   - ID 3: Staff Federico")
+    print("   - ID 4: Customer Emanuele")
+    print("   - ID 5: Customer Niccolo")
+    print("   - ID 6: Customer Antonello")

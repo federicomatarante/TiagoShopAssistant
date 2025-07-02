@@ -6,6 +6,11 @@
       <grid>true</grid>
     </scene>
 
+    <!-- Gazebo plugin to publish model states for vision controller -->
+    <plugin name="gazebo_ros_state" filename="libgazebo_ros_state.so">
+      <update_rate>10.0</update_rate>
+    </plugin>
+
     <!-- We still need a light source so the tops of the models are visible -->
     <include><uri>model://sun</uri></include>
     <include><uri>model://ground_plane</uri></include>
@@ -145,6 +150,7 @@
       <uri>model://shelf</uri>
       <pose>-1 3 0.5 0 0 0</pose> <scale>3.5 1 1</scale>
     </include>
+
 
   </world>
 </sdf>
