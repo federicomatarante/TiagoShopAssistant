@@ -6,7 +6,7 @@ material CustomerTag
     {
       texture_unit
       {
-        texture ../textures/tag_2.png
+        texture ../textures/tag_5.png
         filtering trilinear
       }
     }

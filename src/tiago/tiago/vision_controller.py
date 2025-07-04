@@ -4,7 +4,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
 from gazebo_msgs.msg import ModelStates
 from gazebo_msgs.srv import GetEntityState, GetModelList
-from tiago.msg import VisionPersonDetection
+from tiago.msg import VisionPersonDetection, VisionObjectDetection
 from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
 import numpy as np
@@ -42,6 +42,10 @@ class VisionController(Node):
         self.apriltag_to_person = {}  # apriltag_id -> unique_person_id
         self.unique_persons = {}  # unique_person_id -> person_data
         
+        # AprilTag-based object tracking
+        self.apriltag_to_object = {}  # apriltag_id -> unique_object_id
+        self.unique_objects = {}  # unique_object_id -> object_data
+        
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
             Image,
@@ -60,6 +64,12 @@ class VisionController(Node):
         self.result_publisher = self.create_publisher(
             VisionPersonDetection,
             '/person_detection',
+            10)
+        
+        # Publisher for object detection results
+        self.object_publisher = self.create_publisher(
+            VisionObjectDetection,
+            '/object_detection',
             10)
         
         # Try to initialize face cascade (with error handling)
@@ -88,7 +98,16 @@ class VisionController(Node):
             3: {'type': 'staff', 'name': 'staff_federico', 'gazebo_model': 'staff_federico'},
             4: {'type': 'customer', 'name': 'customer_emanuele', 'gazebo_model': 'customer_emanuele'},
             5: {'type': 'customer', 'name': 'customer_niccolo', 'gazebo_model': 'customer_niccolo'},
-            6: {'type': 'customer', 'name': 'customer_antonello', 'gazebo_model': 'customer_antonello'}
+            6: {'type': 'customer', 'name': 'customer_antonello', 'gazebo_model': 'customer_antonello'},
+            # Object tags (sport equipment on red boxes) - 8 total objects, 2 different per sport
+            8: {'type': 'object', 'class': 'baseball', 'object': 'baseball bat', 'gazebo_model': 'red_box_baseball_bat'},
+            9: {'type': 'object', 'class': 'baseball', 'object': 'baseball', 'gazebo_model': 'red_box_baseball'},
+            10: {'type': 'object', 'class': 'soccer', 'object': 'soccer ball', 'gazebo_model': 'red_box_soccer_ball'},
+            11: {'type': 'object', 'class': 'soccer', 'object': 'soccer cleats', 'gazebo_model': 'red_box_soccer_cleats'},
+            12: {'type': 'object', 'class': 'basketball', 'object': 'basketball', 'gazebo_model': 'red_box_basketball'},
+            13: {'type': 'object', 'class': 'basketball', 'object': 'basketball hoop', 'gazebo_model': 'red_box_basketball_hoop'},
+            14: {'type': 'object', 'class': 'tennis', 'object': 'tennis racket', 'gazebo_model': 'red_box_tennis_racket'},
+            15: {'type': 'object', 'class': 'tennis', 'object': 'tennis ball', 'gazebo_model': 'red_box_tennis_ball'}
         }
         
         self.get_logger().info('AprilTag detector initialized')
@@ -221,8 +240,6 @@ class VisionController(Node):
             return None
  
 
- 
-
     def get_or_create_unique_person(self, apriltag_id, person_data):
         """Get or create unique person identity based on AprilTag ID"""
         if apriltag_id in self.apriltag_to_person:
@@ -274,6 +291,55 @@ class VisionController(Node):
             
         return False
 
+    def get_or_create_unique_object(self, apriltag_id, object_data):
+        """Get or create unique object identity based on AprilTag ID"""
+        if apriltag_id in self.apriltag_to_object:
+            # Update existing object (but keep original position to avoid duplicates)
+            unique_id = self.apriltag_to_object[apriltag_id]
+            self.unique_objects[unique_id].update({
+                'last_seen': time.time(),
+                'tag_center': object_data.get('tag_center'),
+                'confidence': object_data.get('confidence')
+                # NOTE: Position is NOT updated to prevent duplicate detections from multiple faces
+            })
+            return unique_id, False  # False = not new
+        else:
+            # Create new unique object with initial position
+            unique_id = f"object_{apriltag_id}"
+            self.apriltag_to_object[apriltag_id] = unique_id
+            self.unique_objects[unique_id] = {
+                'class': object_data.get('class', 'unknown'),
+                'object': object_data.get('name', 'unknown'),  # Use 'name' field consistently
+                'apriltag_id': apriltag_id,
+                'first_seen': time.time(),
+                'last_seen': time.time(),
+                'position': object_data.get('world_position'),  # Store position only once
+                'tag_center': object_data.get('tag_center'),
+                'confidence': object_data.get('confidence'),
+                'position_locked': True  # Flag to indicate position is set and should not change
+            }
+            return unique_id, True  # True = is new
+
+    def should_publish_object_update(self, unique_id, is_new_object):
+        """Determine if object update should be published"""
+        obj = self.unique_objects.get(unique_id)
+        if not obj:
+            return False
+            
+        # Always publish new objects immediately
+        if is_new_object:
+            obj['last_publish'] = time.time()
+            return True
+            
+        # For existing objects, publish every 2 seconds
+        current_time = time.time()
+        last_publish = obj.get('last_publish', 0)
+        
+        if current_time - last_publish > 2.0:  # 2 second interval
+            obj['last_publish'] = current_time
+            return True
+            
+        return False
 
     def detect_persons(self, image):
         """Detect persons in the given image"""
@@ -392,6 +458,53 @@ class VisionController(Node):
             self.get_logger().error(f'Error in badge detection: {e}')
             return 'unknown'
 
+    def detect_red_regions(self, image):
+        """Simple red color detection for confidence boost"""
+        try:
+            # Convert to HSV for better color detection
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            
+            # Define red color range (two ranges for red hue wrap-around)
+            lower_red1 = np.array([0, 50, 50])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 50, 50])
+            upper_red2 = np.array([180, 255, 255])
+            
+            # Create masks for red regions
+            mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+            mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+            red_mask = cv2.bitwise_or(mask1, mask2)
+            
+            # Find contours
+            contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            red_regions = []
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if area > 500:  # Minimum area threshold
+                    x, y, w, h = cv2.boundingRect(contour)
+                    red_regions.append((x, y, w, h, area))
+            
+            return red_regions
+            
+        except Exception as e:
+            self.get_logger().error(f'Error in red detection: {e}')
+            return []
+
+    def is_tag_on_red_box(self, tag_info, red_regions):
+        """Check if AprilTag is on a red region"""
+        if not red_regions:
+            return False
+            
+        tag_center = tag_info['center']
+        
+        for x, y, w, h, area in red_regions:
+            # Check if tag center is within red region
+            if x <= tag_center[0] <= x + w and y <= tag_center[1] <= y + h:
+                return True
+        
+        return False
+
     def classify_person_with_tag(self, image, person_rect, tag_info=None, timestamp=None):
         """Simplified pipeline: AprilTag -> Classification -> Gazebo Position Lookup"""
         
@@ -409,9 +522,15 @@ class VisionController(Node):
             if not world_coords:
                 self.get_logger().debug(f'No position data available for {gazebo_model_name}')
 
+            # Handle different field names for person vs object tags
+            if tag_data['type'] == 'object':
+                name = tag_data['object']  # Objects use 'object' field
+            else:
+                name = tag_data['name']    # Persons use 'name' field
+                
             return {
                 'person_type': tag_data['type'],
-                'name': tag_data['name'],
+                'name': name,
                 'tag_id': tag_info['id'],
                 'confidence': confidence,
                 'pixel_position': f"x:{x}, y:{y}, w:{w}, h:{h}",
@@ -460,11 +579,14 @@ class VisionController(Node):
             
             # Step 2: Detect AprilTags
             detected_tags = self.detect_apriltags(cv_image)
+            
+            # Step 3: Detect red regions (for confidence boost)
+            red_regions = self.detect_red_regions(cv_image)
 
             if len(person_rects) > 0:
                 # Always log detection counts if should_log
                 if should_log:
-                    self.get_logger().info(f'Detected {len(person_rects)} person(s) and {len(detected_tags)} AprilTag(s)')
+                    self.get_logger().info(f'Detected {len(person_rects)} person(s), {len(detected_tags)} AprilTag(s), and {len(red_regions)} red region(s)')
 
                 # Step 3: Match tags to persons (ALWAYS)
                 matches = self.match_tags_to_persons(person_rects, detected_tags)
@@ -520,6 +642,68 @@ class VisionController(Node):
                         # Handle persons without AprilTags (don't publish to avoid duplicates)
                         if should_log:
                             self.get_logger().info(f'Person detected without AprilTag - not publishing to avoid duplicates')
+            
+            # Handle object detection for AprilTags not matched to persons
+            if len(detected_tags) > 0:
+                # Find tags that are objects (ID 8+) and not matched to persons
+                object_tags = [tag for tag in detected_tags if tag['id'] >= 8 and tag['id'] in self.tag_mapping]
+                
+                for tag in object_tags:
+                    tag_id = tag['id']
+                    tag_data = self.tag_mapping[tag_id]
+                    
+                    # Get position from Gazebo
+                    gazebo_model_name = tag_data['gazebo_model']
+                    world_coords = self.get_position_from_gazebo(gazebo_model_name)
+                    
+                    # Check if tag is on red box for confidence boost
+                    is_on_red = self.is_tag_on_red_box(tag, red_regions)
+                    base_confidence = min(0.95, max(0.5, tag['confidence'] / 50.0))
+                    confidence_boost = 0.1 if is_on_red else 0.0
+                    
+                    # Create object data
+                    object_data = {
+                        'class': tag_data['class'],
+                        'name': tag_data['object'],  # Use 'name' to match get_or_create_unique_object
+                        'world_position': world_coords,
+                        'tag_center': tag['center'].tolist(),
+                        'confidence': min(0.99, base_confidence + confidence_boost),
+                        'on_red_box': is_on_red
+                    }
+                    
+                    # Track and publish object
+                    unique_id, is_new = self.get_or_create_unique_object(tag_id, object_data)
+                    
+                    if self.should_publish_object_update(unique_id, is_new):
+                        obj_data = self.unique_objects[unique_id]
+                        
+                        result_msg = VisionObjectDetection()
+                        result_msg.sport_class = obj_data['class']
+                        result_msg.object = obj_data['object']
+                        
+                        # Set 3D position
+                        result_msg.position = Point()
+                        world_pos = obj_data.get('position')
+                        if world_pos and len(world_pos) >= 3:
+                            result_msg.position.x = float(world_pos[0])
+                            result_msg.position.y = float(world_pos[1])
+                            result_msg.position.z = float(world_pos[2])
+                        else:
+                            result_msg.position.x = 0.0
+                            result_msg.position.y = 0.0
+                            result_msg.position.z = 0.0
+                        
+                        self.object_publisher.publish(result_msg)
+                        
+                        if should_log:
+                            status = "NEW" if is_new else "UPDATE"
+                            if world_pos:
+                                self.get_logger().info(f'{"="*60}')
+                                self.get_logger().info(f'{status} OBJECT: {obj_data["object"]} ({obj_data["class"]})')
+                                self.get_logger().info(f'POSITION: [{world_pos[0]:.3f}, {world_pos[1]:.3f}, {world_pos[2]:.3f}]')
+                                self.get_logger().info(f'{"="*60}')
+                            else:
+                                self.get_logger().info(f'{status} OBJECT: {obj_data["object"]} - NO POSITION')
 
             elif len(detected_tags) > 0 and should_log:
                 self.get_logger().info(f'No persons detected, but found {len(detected_tags)} AprilTag(s)')

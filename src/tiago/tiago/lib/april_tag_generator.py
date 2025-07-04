@@ -16,7 +16,16 @@ def download_official_apriltags():
         3: f"{base_url}tag36_11_00003.png",  # Staff Federico
         4: f"{base_url}tag36_11_00004.png",  # Customer Emanuele
         5: f"{base_url}tag36_11_00005.png",  # Customer Niccolo
-        6: f"{base_url}tag36_11_00006.png"   # Customer Antonello
+        6: f"{base_url}tag36_11_00006.png",  # Customer Antonello
+        # Sport objects (red boxes)
+        8: f"{base_url}tag36_11_00008.png",  # Baseball bat
+        9: f"{base_url}tag36_11_00009.png",  # Baseball
+        10: f"{base_url}tag36_11_00010.png", # Soccer ball
+        11: f"{base_url}tag36_11_00011.png", # Soccer cleats
+        12: f"{base_url}tag36_11_00012.png", # Basketball
+        13: f"{base_url}tag36_11_00013.png", # Basketball hoop
+        14: f"{base_url}tag36_11_00014.png", # Tennis racket
+        15: f"{base_url}tag36_11_00015.png"  # Tennis ball
     }
     
     # Create output directories
@@ -64,6 +73,9 @@ def download_official_apriltags():
                 cv2.imwrite("customer_antonello/materials/textures/tag_6.png", resized)
                 cv2.imwrite("tag_6.png", resized)  # Backup copy
                 print(f"AprilTag saved to customer_antonello/materials/textures/tag_6.png")
+            elif tag_id >= 8:  # Sport objects
+                cv2.imwrite(f"tag_{tag_id}.png", resized)  # General backup copy
+                print(f"AprilTag {tag_id} saved to tag_{tag_id}.png")
             
             # Remove original download
             os.remove(filename)

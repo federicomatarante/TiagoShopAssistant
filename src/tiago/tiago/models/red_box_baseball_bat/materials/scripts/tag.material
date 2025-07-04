@@ -1,0 +1,15 @@
+material Tag8
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture ../textures/tag_8.png
+        tex_address_mode clamp
+        filtering linear linear none
+      }
+    }
+  }
+}

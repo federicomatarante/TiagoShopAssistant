@@ -1,4 +1,4 @@
-material StaffTag
+material Tag10
 {
   technique
   {
@@ -6,7 +6,7 @@ material StaffTag
     {
       texture_unit
       {
-        texture ../textures/tag_3.png
+        texture ../textures/tag_10.png
         tex_address_mode clamp
         filtering linear linear none
       }

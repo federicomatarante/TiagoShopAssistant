@@ -1,0 +1,15 @@
+material Tag9
+{
+  technique
+  {
+    pass
+    {
+      texture_unit
+      {
+        texture ../textures/tag_9.png
+        tex_address_mode clamp
+        filtering linear linear none
+      }
+    }
+  }
+}

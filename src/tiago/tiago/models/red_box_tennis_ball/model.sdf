@@ -1,0 +1,147 @@
+<?xml version="1.0" ?>
+<sdf version='1.7'>
+  <model name='red_box_tennis_ball'>
+    <static>true</static>
+    <link name='link'>
+      <pose>0 0 0.165 0 0 0</pose>
+      <visual name='box_visual'>
+        <geometry>
+          <box><size>0.33 0.33 0.33</size></box>
+        </geometry>
+        <material>
+          <ambient>0.8 0.0 0.0 1</ambient>
+          <diffuse>0.8 0.0 0.0 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+          <emissive>0 0 0 0</emissive>
+        </material>
+      </visual>
+      <collision name='collision'>
+        <geometry>
+          <box><size>0.33 0.33 0.33</size></box>
+        </geometry>
+      </collision>
+    </link>
+    
+    <\!-- AprilTag on top face -->
+    <link name="apriltag_top">
+      <pose>0 0 0.331 0 0 0</pose>
+      <visual name="tag_visual_top">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- AprilTag on bottom face -->
+    <link name="apriltag_bottom">
+      <pose>0 0 -0.001 0 0 0</pose>
+      <visual name="tag_visual_bottom">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- AprilTag on front face -->
+    <link name="apriltag_front">
+      <pose>0 0.166 0.165 1.5708 0 0</pose>
+      <visual name="tag_visual_front">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- AprilTag on back face -->
+    <link name="apriltag_back">
+      <pose>0 -0.166 0.165 -1.5708 0 0</pose>
+      <visual name="tag_visual_back">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- AprilTag on right face -->
+    <link name="apriltag_right">
+      <pose>0.166 0 0.165 0 1.5708 0</pose>
+      <visual name="tag_visual_right">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- AprilTag on left face -->
+    <link name="apriltag_left">
+      <pose>-0.166 0 0.165 0 -1.5708 0</pose>
+      <visual name="tag_visual_left">
+        <geometry>
+          <box><size>0.2 0.2 0.001</size></box>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://red_box_tennis_ball/materials/scripts</uri>
+            <name>Tag15</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+    
+    <\!-- Joints to attach all AprilTags -->
+    <joint name="tag_joint_top" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_top</child>
+    </joint>
+    <joint name="tag_joint_bottom" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_bottom</child>
+    </joint>
+    <joint name="tag_joint_front" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_front</child>
+    </joint>
+    <joint name="tag_joint_back" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_back</child>
+    </joint>
+    <joint name="tag_joint_right" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_right</child>
+    </joint>
+    <joint name="tag_joint_left" type="fixed">
+      <parent>link</parent>
+      <child>apriltag_left</child>
+    </joint>
+  </model>
+</sdf>
