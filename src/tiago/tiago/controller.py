@@ -6,10 +6,13 @@ import math
 import time
 
 # Message types
+from std_srvs.srv import Trigger
 from nav_msgs.msg import Path
+from std_msgs.msg import String
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped, Point, Quaternion as RosQuaternion
 from action_msgs.msg import GoalStatus
+
 
 def _yaw_to_quaternion(yaw_radians):
     """Helper function to convert yaw angle (in radians) to ROS Quaternion."""
@@ -25,7 +28,7 @@ def _quaternion_to_yaw(quaternion):
     """Helper function to convert ROS Quaternion to yaw angle (in radians)."""
     return math.atan2(
         2.0 * (quaternion.w * quaternion.z + quaternion.x * quaternion.y),
-        1.0 - 2.0 * (quaternion.y**2 + quaternion.z**2)
+        1.0 - 2.0 * (quaternion.y ** 2 + quaternion.z ** 2)
     )
 
 
@@ -44,6 +47,7 @@ class SimpleNavigationController(Node):
     A simple ROS 2 node that receives a path and navigates to each waypoint 
     using Nav2's NavigateToPose action, with improved error handling and recovery.
     """
+
     def __init__(self):
         super().__init__('simple_navigation_controller')
         self.get_logger().info("Simple Navigation Controller node has been started.")
@@ -51,9 +55,9 @@ class SimpleNavigationController(Node):
         # --- Parameters ---
         self.declare_parameter('goal_tolerance', 0.1)
         self.declare_parameter('navigation_timeout', 120.0)  # seconds
-        self.declare_parameter('goal_send_timeout', 5.0)     # seconds
-        self.declare_parameter('max_retry_attempts', 3)      # max retries per waypoint
-        self.declare_parameter('retry_delay', 2.0)           # seconds between retries
+        self.declare_parameter('goal_send_timeout', 5.0)  # seconds
+        self.declare_parameter('max_retry_attempts', 3)  # max retries per waypoint
+        self.declare_parameter('retry_delay', 2.0)  # seconds between retries
 
         # --- State Variables ---
         self.current_path = []
@@ -77,11 +81,35 @@ class SimpleNavigationController(Node):
             self.path_callback,
             10)
 
+        # Publishers
+        
+        self.path_planner_publisher = self.create_publisher(
+            String, 'path_planner_status', 10)
+
+        # --- Service server for path commands ---
+        self.srv = self.create_service(Trigger, '/controller/stop_trigger', self.stop_trigger_callback)
+
         # --- Single timer for managing navigation flow ---
         self.navigation_timer = self.create_timer(0.5, self.navigation_state_machine)
 
         # --- State machine states ---
         self.state = 'IDLE'  # IDLE, NAVIGATING, RETRY_WAIT, MOVING_TO_NEXT
+
+    def stop_trigger_callback(self, request, response):  # TODO check if it works
+        """Service callback to stop the navigation."""
+        self.get_logger().info("Stop trigger received, canceling navigation.")
+        if self.is_navigating and self.current_goal_handle:
+            self.current_goal_handle.cancel_goal_async()
+            self.is_navigating = False
+            self.current_goal_handle = None
+            self.state = 'IDLE'
+            self.current_path = []
+            response.success = True
+            response.message = "Navigation stopped successfully."
+        else:
+            response.success = False
+            response.message = "No ongoing navigation to stop."
+        return response
 
     def _check_nav_server_ready(self, timeout_sec=5.0):
         """Checks if the Nav2 action server is ready, waits if necessary."""
@@ -96,7 +124,7 @@ class SimpleNavigationController(Node):
     def path_callback(self, msg: Path):
         """Receives a new path and starts navigation to the first waypoint."""
         self.get_logger().info(f"New path with {len(msg.poses)} waypoints received.")
-        
+
         # Cancel any ongoing navigation
         if self.is_navigating and self.current_goal_handle:
             self.get_logger().info("Canceling current navigation goal.")
@@ -120,20 +148,20 @@ class SimpleNavigationController(Node):
         """State machine to handle navigation flow."""
         if self.state == 'IDLE':
             return
-        
+
         if self.state == 'MOVING_TO_NEXT':
             if not self.current_path or self.target_waypoint_index >= len(self.current_path):
                 self.get_logger().info("All waypoints completed or no valid waypoints.")
                 self.state = 'IDLE'
                 self.current_path = []
                 return
-            
+
             if self.start_navigation_to_current_waypoint():
                 self.state = 'NAVIGATING'
                 self.goal_start_time = time.time()
             else:
                 self.handle_navigation_failure()
-        
+
         elif self.state == 'NAVIGATING':
             timeout = self.get_parameter('navigation_timeout').value
             if self.goal_start_time and (time.time() - self.goal_start_time) > timeout:
@@ -225,6 +253,11 @@ class SimpleNavigationController(Node):
                     self.state = 'MOVING_TO_NEXT'
                 else:
                     self.get_logger().info("All waypoints reached! Path navigation completed.")
+                    # Publish "finished" message
+                    msg = String()
+                    msg.data = "finished"
+                    self.path_planner_publisher.publish(msg)
+                    self.get_logger().info("Published 'finished' status to path_planner_status.")
                     self.current_path = []
                     self.state = 'IDLE'
             elif status == GoalStatus.STATUS_CANCELED:
@@ -282,6 +315,7 @@ def main(args=None):
             controller_node.current_goal_handle.cancel_goal_async()
         controller_node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
