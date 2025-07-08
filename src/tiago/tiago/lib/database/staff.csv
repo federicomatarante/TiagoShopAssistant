@@ -1,0 +1,4 @@
+staff_id,name,categories,role
+staff_leonardo,Leonardo,"[""Tennis"", ""Soccer""]",Employee
+staff_lorenzo,Lorenzo,"[""Basketball"", ""Baseball""]",Manager Assistant
+staff_federico,Federico,"[""Soccer"", ""Basketball"", ""Tennis"", ""Baseball""]",Manager
