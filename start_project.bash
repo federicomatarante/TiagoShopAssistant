@@ -13,7 +13,7 @@ DEFAULT_NODES=(
     "tiago database_loader_node"
     "tiago path_planner"
     "tiago vision_controller"
-    "tiago tiago_navigation.launch"
+    # "tiago tiago_navigation.launch"
     "tiago reasoning_node"
 )
 

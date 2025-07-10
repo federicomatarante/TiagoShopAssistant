@@ -5,9 +5,12 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from tf2_ros import Buffer, TransformListener
+import tf2_geometry_msgs
 
 from geometry_msgs.msg import Point
 from std_msgs.msg import String
+from nav_msgs.msg import Odometry
 from tiago.srv import PathPlannerCommand, HRICommand
 from tiago.msg import VisionPersonDetection, ConversationStatus
 
@@ -26,6 +29,15 @@ class ReasoningNode(Node):
         self.robot_position = Point()
 
         self.get_logger().info("Starting TiaGo Reasoning Node")
+
+        # TF2 for robot position tracking
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.robot_frame = 'base_link'
+        self.map_frame = 'map'
+
+        # Timer to update robot position
+        self.position_timer = self.create_timer(0.5, self.update_robot_position)
 
         # QoS profiles
         self.qos_reliable = QoSProfile(
@@ -60,9 +72,35 @@ class ReasoningNode(Node):
         self.hri_status_sub = self.create_subscription(
             ConversationStatus, 'hri_conversation_status', self.on_hri_status, self.qos_reliable)
 
+        # Alternative: Subscribe to odometry if TF is not available
+        self.odom_sub = self.create_subscription(
+            Odometry, '/odom', self.on_odometry, self.qos_sensor)
+
         # Start random walk
         self.send_path_command("random_walk")
         self.get_logger().info("Node initialized - starting random walk")
+
+    def update_robot_position(self):
+        """Update robot position using TF2."""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self.map_frame, self.robot_frame, rclpy.time.Time())
+            
+            self.robot_position.x = transform.transform.translation.x
+            self.robot_position.y = transform.transform.translation.y
+            self.robot_position.z = transform.transform.translation.z
+            
+        except Exception as e:
+            # Don't spam the logs with TF errors
+            pass
+
+    def on_odometry(self, msg):
+        """Fallback: update robot position from odometry if TF is not available."""
+        if self.robot_position.x == 0.0 and self.robot_position.y == 0.0:
+            # Only use odometry if TF is not working
+            self.robot_position.x = msg.pose.pose.position.x
+            self.robot_position.y = msg.pose.pose.position.y
+            self.robot_position.z = msg.pose.pose.position.z
 
     # Callbacks
     def on_path_status(self, msg):
@@ -109,7 +147,7 @@ class ReasoningNode(Node):
         self.current_person_id = None
 
     def get_distance_class(self, position):
-        # Simple distance from robot position
+        # Now uses updated robot position
         dx = position.x - self.robot_position.x
         dy = position.y - self.robot_position.y
         dz = position.z - self.robot_position.z
