@@ -1,4 +1,4 @@
-staff_id,name,categories,role
-staff_leonardo,Leonardo,"[""Tennis"", ""Soccer""]",Employee
-staff_lorenzo,Lorenzo,"[""Basketball"", ""Baseball""]",Manager Assistant
-staff_federico,Federico,"[""Soccer"", ""Basketball"", ""Tennis"", ""Baseball""]",Manager
+staff_id,name,categories,role,location
+staff_leonardo,Leonardo,"[""Tennis"", ""Soccer""]",Employee,"2.5 0.0 0.0"
+staff_lorenzo,Lorenzo,"[""Basketball"", ""Baseball""]",Manager Assistant,"6.722341 -3.300510 0.0"
+staff_federico,Federico,"[""Soccer"", ""Basketball"", ""Tennis"", ""Baseball""]",Manager,"-1.933579 -1.933579 0.0"
