@@ -125,9 +125,9 @@ def generate_launch_description():
         # 2. Gazebo
         gazebo_launch,
         # 3. RViz (delay to allow Gazebo to initialize)
-        TimerAction(period=5.0, actions=[rviz_node]),
+        TimerAction(period=10.0, actions=[rviz_node]),
         # 4. Nav2 (delay to ensure map & AMCL ready)
-        TimerAction(period=7.0, actions=[nav2_launch]),
+        TimerAction(period=15.0, actions=[nav2_launch]),
         # 5. Publish initial pose after a delay
         initial_pose_publisher,
     ])

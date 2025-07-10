@@ -19,21 +19,23 @@ from ament_index_python.packages import get_package_share_directory
 
 # This is the absolute import for your A* library
 from tiago.lib.path.astar_path_planner import AStarPathPlanner
-from tiago.srv import PathPlannerCommand  # You need to create this service definition
+from tiago.srv import PathPlannerCommand
 
 class PathPlannerService(Node):
     """
-    ROS 2 Node that provides path planning services using the A* algorithm.
-    Handles both GetPlan service calls and PathPlannerCommand service calls.
+    ROS 2 Node that provides path planning services using an improved A* algorithm.
+    The A* planner itself is modified to prioritize paths away from obstacles.
     """
     def __init__(self):
         super().__init__('path_planner_service')
         self.get_logger().info(f"Node '{self.get_name()}' has been started.")
 
-        # Declare parameters
-        self.declare_parameter('w_heuristic', 100.0)
+        # --- Parameters ---
+        # The 'safety_weight' is now the primary control for path safety.
+        # It's passed to the A* algorithm to penalize paths close to obstacles.
+        # Higher values create safer, more central paths.
+        self.declare_parameter('safety_weight', 5.0)
         self.declare_parameter('smoothing_points', 40)
-        self.declare_parameter('smoothing_collision_threshold', 0.3)
         self.declare_parameter('map_filename', 'my_map.yaml')
 
         # Publishers
@@ -83,53 +85,52 @@ class PathPlannerService(Node):
             return [transform.transform.translation.x, transform.transform.translation.y]
         except Exception as e:
             self.get_logger().warn(f"Could not get robot position: {e}")
-            return [0.0, 0.0, 0.0]  # Default position
+            return [0.0, 0.0]
+
+    def _plan_and_smooth_path(self, start_coords, goal_coords):
+        """
+        Helper function to run the A* planner and then smooth the result.
+        This centralizes the logic and uses the new safety-aware planner.
+        """
+        safety_weight = self.get_parameter('safety_weight').get_parameter_value().double_value
+        num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
+
+        self.get_logger().info(f"Planning path from {start_coords} to {goal_coords} with safety_weight={safety_weight}...")
+        
+        # Call the planner, which now internally handles obstacle avoidance
+        raw_path = self.planner.find_path(start_coords, goal_coords, safety_weight=safety_weight)
+
+        if not raw_path:
+            self.get_logger().warn("A* planner failed to find a path.")
+            return None
+
+        # Smoothing is now mostly for aesthetics, so collision_threshold can be small.
+        smoothed_path = self.planner.smooth_path(raw_path, num_points=num_points, collision_threshold=0.1)
+        
+        # Return the smoothed path if available, otherwise fall back to the raw (but safe) A* path
+        return smoothed_path if smoothed_path else raw_path
 
     def generate_random_walk_path(self):
-        """
-        Generates a path to a single randomly selected waypoint using the A* algorithm.
-        """
-        # Define predefined waypoints for random walk (adjust based on your map)
+        """Generates a path to a single randomly selected waypoint using the safety-aware A* algorithm."""
         predefined_waypoints = [
-            [0, -4.0, 0.0],    # Near entrance
-            [0, 3.5, 0.0],    # Opposite to the entrance
-            [-5.5, 0, 0.0],    # Left aisle
-            [5.5, 0, 0.0],   # Right aisle
-            [0, 0, 0.0],    # Center
+            [0, -4.0], [0, 3.5], [-5.5, 0], [5.5, 0], [0, 0]
         ]
         
         current_pos = self.get_robot_position()
         
-        # Filter waypoints to find ones that are reachable from the current position
-        reachable_waypoints = []
-        for waypoint in predefined_waypoints:
-            if self.planner.is_valid_point(waypoint):
-                # Check if a path exists from the current position to the waypoint
-                test_path = self.planner.find_path(current_pos, waypoint, w=1.0)
-                if test_path:
-                    reachable_waypoints.append(waypoint)
+        reachable_waypoints = [wp for wp in predefined_waypoints if self.planner.is_valid_point(wp)]
         
         if not reachable_waypoints:
-            self.get_logger().warn("No reachable waypoints found for random walk from current position.")
-            return self.create_path_message([]) # Return an empty path
+            self.get_logger().warn("No valid waypoints for random walk.")
+            return self.create_path_message([])
 
-        # Select one random target waypoint from the reachable ones
         random_target = random.choice(reachable_waypoints)
-        self.get_logger().info(f"Generating A* random walk path to: {random_target}")
+        
+        final_path_points = self._plan_and_smooth_path(current_pos, random_target)
 
-        # Use the A* planner to generate a full path to the target
-        w = self.get_parameter('w_heuristic').get_parameter_value().double_value
-        num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
-        threshold = self.get_parameter('smoothing_collision_threshold').get_parameter_value().double_value
-
-        raw_path = self.planner.find_path(current_pos, random_target, w=w)
-
-        if not raw_path:
-            self.get_logger().warn(f"A* could not find a path to the random waypoint {random_target}, though it was deemed reachable.")
-            return self.create_path_message([]) # Return empty path
-
-        smoothed_path = self.planner.smooth_path(raw_path, num_points=num_points, collision_threshold=threshold)
-        final_path_points = smoothed_path if smoothed_path else raw_path
+        if not final_path_points:
+            self.get_logger().warn(f"Could not generate random walk path to {random_target}.")
+            return self.create_path_message([])
         
         self.get_logger().info(f"Generated A* random walk path with {len(final_path_points)} points.")
         return self.create_path_message(final_path_points)
@@ -166,7 +167,7 @@ class PathPlannerService(Node):
                 response.success = True
                 response.message = "Random walk path generated and published"
             except Exception as e:
-                self.get_logger().error(f"Failed to generate random walk: {e}")
+                self.get_logger().error(f"Failed to generate random walk: {e}", exc_info=True)
                 response.success = False
                 response.message = f"Failed to generate random walk: {e}"
         
@@ -175,18 +176,10 @@ class PathPlannerService(Node):
                 current_pos = self.get_robot_position()
                 target_pos = [request.location.x, request.location.y]
                 
-                # Use A* to plan path to target location
-                w = self.get_parameter('w_heuristic').get_parameter_value().double_value
-                raw_path = self.planner.find_path(current_pos, target_pos, w=w)
-                
-                if raw_path:
-                    # Smooth the path
-                    num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
-                    threshold = self.get_parameter('smoothing_collision_threshold').get_parameter_value().double_value
-                    smoothed_path = self.planner.smooth_path(raw_path, num_points=num_points, collision_threshold=threshold)
-                    final_path = smoothed_path if smoothed_path else raw_path
-                    
-                    ros_path = self.create_path_message(final_path)
+                final_path_points = self._plan_and_smooth_path(current_pos, target_pos)
+
+                if final_path_points:
+                    ros_path = self.create_path_message(final_path_points)
                     self.path_publisher.publish(ros_path)
                     self.publish_status("started_navigation")
                     response.success = True
@@ -195,17 +188,14 @@ class PathPlannerService(Node):
                     response.success = False
                     response.message = "No path found to target location"
             except Exception as e:
-                self.get_logger().error(f"Failed to plan path to location: {e}")
+                self.get_logger().error(f"Failed to plan path to location: {e}", exc_info=True)
                 response.success = False
                 response.message = f"Failed to plan path: {e}"
         
         elif command == "stop_movement":
             try:
-                # Call controller stop service
                 if self.controller_stop_client.service_is_ready():
-                    stop_request = Trigger.Request()
-                    future = self.controller_stop_client.call_async(stop_request)
-                    # Note: Not waiting for response in this simple implementation
+                    self.controller_stop_client.call_async(Trigger.Request())
                     self.publish_status("stopped")
                     response.success = True
                     response.message = "Stop command sent to controller"
@@ -236,32 +226,18 @@ class PathPlannerService(Node):
         start_coords = [request.start.pose.position.x, request.start.pose.position.y]
         goal_coords = [request.goal.pose.position.x, request.goal.pose.position.y]
 
-        self.get_logger().info(f"Received path request from {start_coords} to {goal_coords}")
-
-        # Get planner settings from ROS parameters
-        w = self.get_parameter('w_heuristic').get_parameter_value().double_value
-        num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
-        threshold = self.get_parameter('smoothing_collision_threshold').get_parameter_value().double_value
-
-        # Find and smooth path
-        raw_path = self.planner.find_path(start_coords, goal_coords, w=w)
-
-        if not raw_path:
-            self.get_logger().warn("No path found by A* algorithm.")
+        final_path_points = self._plan_and_smooth_path(start_coords, goal_coords)
+        
+        if final_path_points:
+            response.plan = self.create_path_message(final_path_points)
+            self.get_logger().info("Successfully planned and returned path.")
+            self.path_publisher.publish(response.plan)
+        else:
+            self.get_logger().warn("Path planning failed. Returning empty path.")
             response.plan = Path()
             response.plan.header.stamp = self.get_clock().now().to_msg()
             response.plan.header.frame_id = self.map_frame
-            return response
-
-        smoothed_path = self.planner.smooth_path(raw_path, num_points=num_points, collision_threshold=threshold)
-        final_path_points = smoothed_path if smoothed_path else raw_path
-        
-        response.plan = self.create_path_message(final_path_points)
-        self.get_logger().info("Successfully planned and returned path.")
-        
-        # Also publish the path for the controller
-        self.path_publisher.publish(response.plan)
-        
+            
         return response
 
 def main(args=None):
@@ -272,7 +248,7 @@ def main(args=None):
         rclpy.spin(path_planner_service)
     except Exception as e:
         if path_planner_service:
-            path_planner_service.get_logger().fatal(f"A critical error occurred: {e}")
+            path_planner_service.get_logger().fatal(f"A critical error occurred: {e}", exc_info=True)
         else:
             print(f"Critical error during node initialization: {e}")
     finally:
