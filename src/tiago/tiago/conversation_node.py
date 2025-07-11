@@ -5,7 +5,7 @@ from typing import Optional, Tuple, List, Dict, Any
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
-from std_srvs.srv import Trigger
+from tiago.srv import HRICommand  # Use the HRICommand service
 import sys
 from tiago.lib.assistant import ShopAssistant
 
@@ -38,13 +38,19 @@ class ConversationNode(Node):
         self.get_logger().info("ConversationNode initialized and ready")
 
     def _setup_ros_communication(self):
-        """Setup ROS2 publishers and subscribers"""
+        """Setup ROS2 publishers and subscribers and services."""
 
-        # Subscriber for controller commands (start/stop conversation)
-        self.controller_subscriber = self.create_subscription(
+        # HRI Command service server (replaces controller_subscriber)
+        self.hri_command_service = self.create_service(
+            HRICommand,
+            'hri_command',  # This node will provide the HRICommand service
+            self.hri_command_callback
+        )
+
+        # Publisher for HRI conversation status (to ReasoningNode)
+        self.hri_status_publisher = self.create_publisher(
             ConversationStatus,
-            '/conversation/controller',
-            self.controller_command_callback,
+            'hri_conversation_status',
             10
         )
 
@@ -63,50 +69,54 @@ class ConversationNode(Node):
             10
         )
 
-        # Publisher for walk area commands
-        self.walk_area_publisher = self.create_publisher(
-            String,
-            '/navigation/walk_to_area',
-            10
-        )
-
-        # Service to check if node is online
-        self.status_service = self.create_service(
-            Trigger,
-            '/conversation/status',
-            self.status_service_callback
-        )
-
-    def status_service_callback(self, request, response):
-        """Service callback to report if the node is online"""
-        response.success = True
-        response.message = "ConversationNode is online and ready"
-        return response
-
-    def controller_command_callback(self, msg: ConversationStatus):
-        """Handle commands from the controller"""
-        self.get_logger().info(f"Received controller command: {msg}")
+    def hri_command_callback(self, request: HRICommand.Request, response: HRICommand.Response):
+        """Handle HRI commands from the ReasoningNode."""
+        self.get_logger().info(f"Received HRI command: {request.command}")
         try:
-            command = msg.command
+            command = request.command
 
-            if command == 'start':
-                customer_id = msg.customer_id
-                if customer_id.lower() == 'none':
-                    self.get_logger().warn("Received 'start' command with no customer ID")
-                    return
+            if command == 'start_conversation':
+                customer_id = request.person_id
+                if not customer_id:
+                    self.get_logger().warn("Received 'start_conversation' command with no person ID.")
+                    response.success = False
+                    response.message = "No person ID provided."
+                    return response
                 self._start_conversation(customer_id)
-            elif command == 'stop':
+                response.success = True
+                response.message = "Conversation initiated."
+            elif command == 'stop_conversation':
                 self._finalize_conversation()
+                response.success = True
+                response.message = "Conversation stopped."
+            elif command == 'pause_conversation':
+                # For now, pausing simply means stopping speech input processing
+                # More sophisticated pausing might involve saving LLM state.
+                self.conversation_active = False
+                response.success = True
+                response.message = "Conversation paused."
+            elif command == 'resume_conversation':
+                # Resume conversation after movement
+                self.conversation_active = True
+                # Publish a general prompt for the user to continue the conversation
+                self._publish_assistant_reply("Hello again! How can I help you now?")
+                response.success = True
+                response.message = "Conversation resumed."
             else:
-                self.get_logger().warn(f"Unknown controller command!")
+                self.get_logger().warn(f"Unknown HRI command: {command}")
+                response.success = False
+                response.message = f"Unknown command: {command}"
 
         except Exception as e:
-            self.get_logger().error(f"Error processing controller command: {e}")
+            self.get_logger().error(f"Error processing HRI command: {e}")
+            response.success = False
+            response.message = f"Error processing command: {e}"
+        return response
 
     def speech_input_callback(self, msg: String):
-        """Handle speech recognition input"""
+        """Handle speech recognition input."""
         if not self.conversation_active or not self.current_assistant:
-            self.get_logger().warn("Received speech input but no active conversation")
+            self.get_logger().warn("Received speech input but no active conversation.")
             return
 
         user_input = msg.data.strip()
@@ -124,9 +134,7 @@ class ConversationNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error processing speech input: {e}")
             error_msg = "Sorry, I encountered an error. Could you please repeat that?"
-            tts_msg = String()
-            tts_msg.data = error_msg
-            self.tts_publisher.publish(tts_msg)
+            self._publish_assistant_reply(error_msg)
 
     def _process_user_input_async(self, user_input: str):
         self.current_assistant.add_message(user_input)
@@ -134,8 +142,7 @@ class ConversationNode(Node):
         products_query = self.current_assistant.detect_products_query()
         staff_query = self.current_assistant.detect_staff_query()
         self.get_logger().info(f"Detected direction: {direction}")
-        # Depending on the direction, call the appropriate async database client method
-        # and provide a specific callback to handle its response.
+
         if direction == "walk_to_product":
             self.db_client.extract_relevant_products(
                 products_query,
@@ -159,6 +166,7 @@ class ConversationNode(Node):
         elif direction == "finished":
             assistant_reply = self.current_assistant.answer(option="Say goodbye to the customer")
             self._publish_assistant_reply(assistant_reply)
+            self._publish_hri_status("finished") # Notify ReasoningNode that conversation is finished
             self._finalize_conversation()
         else:
             # For directions that don't require database interaction, respond immediately
@@ -173,74 +181,72 @@ class ConversationNode(Node):
             self.tts_publisher.publish(tts_msg)
             self.get_logger().info(f"Assistant: {reply}")
 
-    def _publish_walk_area(self, areas: Optional[List[str]]):
-        """Helper to publish walk area command."""
-        if areas and len(areas) > 0:
-            area_msg = String()
-            area_msg.data = areas[0]  # Use the first area
-            self.walk_area_publisher.publish(area_msg)
-            self.get_logger().info(f"Published walk to area: {areas[0]}")
+    def _publish_hri_status(self, status: str, area: str = ""):
+        """Helper to publish HRI conversation status."""
+        status_msg = ConversationStatus()
+        status_msg.status = status
+        status_msg.area = area
+        self.hri_status_publisher.publish(status_msg)
+        self.get_logger().info(f"Published HRI status: {status_msg.status} (Area: {status_msg.area})")
 
     # --- Callbacks for DatabaseServiceClient responses ---
 
     def _handle_product_walk_response(self, products: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'walk_to_product' query."""
-        if len(products) > 0:
+        if len(products) > 0 and areas and len(areas) > 0:
             product = products[0]
             self.get_logger().info(f"Found product for walk: {product.name}")
             results = {'products': [product.to_json(), ]}
+            results['areas'] = areas # Always add areas if available
 
-            # Add areas to results if available
-            if areas:
-                results['areas'] = areas
-
-            assistant_reply = self.current_assistant.answer_with_results(results,
-                                                                         option="Say the customer you're going to walk him to the product")
-
-            # Publish walk area command
-            self._publish_walk_area(areas)
+            assistant_reply = self.current_assistant.answer_with_results(
+                results,
+                option="Say the customer you're going to walk him to the product"
+            )
+            self._publish_assistant_reply(assistant_reply)
+            # Notify ReasoningNode to walk to the area
+            self._publish_hri_status("walk_to_area", areas[0])
         else:
-            self.get_logger().warn(f"Could not find product for walk.")
+            self.get_logger().warn(f"Could not find product or area for walk.")
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you couldn't find the product so you cannot walk him to it"
             )
-        self._publish_assistant_reply(assistant_reply)
+            self._publish_assistant_reply(assistant_reply)
 
     def _handle_staff_walk_response(self, staff: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'walk_to_staff' query."""
-        if len(staff) > 0:
+        if len(staff) > 0 and areas and len(areas) > 0:
             staff_member = staff[0]
             self.get_logger().info(f"Found staff member for walk: {staff_member.name}")
             results = {'staff': [staff_member.to_json(), ]}
+            results['areas'] = areas
 
-            # Add areas to results if available
-            if areas:
-                results['areas'] = areas
-
-            assistant_reply = self.current_assistant.answer_with_results(results,
-                                                                         option="Say the customer you're going to walk him to the staff member")
-
-            # Publish walk area command
-            self._publish_walk_area(areas)
+            assistant_reply = self.current_assistant.answer_with_results(
+                results,
+                option="Say the customer you're going to walk him to the staff member"
+            )
+            self._publish_assistant_reply(assistant_reply)
+            # Notify ReasoningNode to walk to the area
+            self._publish_hri_status("walk_to_area", areas[0])
         else:
-            self.get_logger().warn(f"Could not find staff member for walk.")
+            self.get_logger().warn(f"Could not find staff member or area for walk.")
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you couldn't find the staff member so you cannot walk him to it"
             )
-        self._publish_assistant_reply(assistant_reply)
+            self._publish_assistant_reply(assistant_reply)
 
     def _handle_product_info_response(self, products: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'product_info' query."""
         if len(products) > 0:
             self.get_logger().info(f"Found product(s) for info: {[p.name for p in products]}")
             results = {'products': [product.to_json() for product in products]}
-
-            # Add areas to results if available
-            if areas:
+            if areas: # Include areas in results if available
                 results['areas'] = areas
 
-            assistant_reply = self.current_assistant.answer_with_results(results,
-                                                                         option="Say the customer you found the product information")
+            assistant_reply = self.current_assistant.answer_with_results(
+                results,
+                option="Say the customer you found the product information"
+            )
         else:
             self.get_logger().warn(f"Could not find product for info.")
             assistant_reply = self.current_assistant.answer(
@@ -253,13 +259,13 @@ class ConversationNode(Node):
         if len(staff) > 0:
             self.get_logger().info(f"Found staff member(s) for info: {[s.name for s in staff]}")
             results = {'staff': [staffer.to_json() for staffer in staff]}
-
-            # Add areas to results if available
-            if areas:
+            if areas: # Include areas in results if available
                 results['areas'] = areas
 
-            assistant_reply = self.current_assistant.answer_with_results(results,
-                                                                         option="Say the customer you found the staff information")
+            assistant_reply = self.current_assistant.answer_with_results(
+                results,
+                option="Say the customer you found the staff information"
+            )
         else:
             self.get_logger().warn(f"Could not find staff member for info.")
             assistant_reply = self.current_assistant.answer(
@@ -268,7 +274,7 @@ class ConversationNode(Node):
         self._publish_assistant_reply(assistant_reply)
 
     def _start_conversation(self, customer_id: str):
-        """Start a new conversation with a customer"""
+        """Start a new conversation with a customer."""
         try:
             self.current_assistant = ShopAssistant(
                 model=self.model_name,
@@ -300,7 +306,7 @@ class ConversationNode(Node):
             self.get_logger().error("Callback received, but conversation state is invalid or customer ID is missing.")
 
     def _finalize_conversation(self):
-        """Finalize and clean up the conversation"""
+        """Finalize and clean up the conversation."""
         if self.current_customer_id and self.current_assistant:
             self.get_logger().info(f"Ending conversation with customer {self.current_customer_id}")
 
@@ -320,13 +326,6 @@ class ConversationNode(Node):
         self.current_customer_id = None
         self.conversation_active = False
         self.current_user_input = None
-
-    def _on_customer_knowledge_saved(self, success: bool):
-        """Callback for when customer knowledge update completes."""
-        if success:
-            self.get_logger().info("Customer knowledge successfully saved to database.")
-        else:
-            self.get_logger().error("Failed to save customer knowledge to database.")
 
 
 def main(args=None):

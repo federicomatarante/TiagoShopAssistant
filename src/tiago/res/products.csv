@@ -1,0 +1,41 @@
+product_id,name,price,description,category,brand,sport_category,location
+red_box_baseball,Premium Baseball,24.99,Official MLB leather baseball with premium cowhide construction for professional leagues,Sports Equipment,Wilson,Baseball,"7.431411 2.900497 1.068998"
+red_box_baseball_bat,Professional Baseball Bat,89.99,Premium maple wood baseball bat with professional grade finish and perfect balance,Sports Equipment,Louisville Slugger,Baseball,"7.228297 -0.022547 0.896645"
+red_box_soccer_ball,FIFA Pro Soccer Ball,39.99,FIFA approved premium soccer ball with thermally bonded panels for professional matches,Sports Equipment,Adidas,Soccer,"-3.002954 -1.049619 0.895531"
+red_box_soccer_cleats,Professional Soccer Cleats,149.99,Premium soccer cleats with kangaroo leather and professional metal studs for elite play,Sports Equipment,Nike,Soccer,"-2.974834 1.119477 0.901128"
+red_box_basketball,Official NBA Basketball,44.99,Premium NBA basketball with composite leather construction for official tournament play,Sports Equipment,Spalding,Basketball,"3.168715 0.987624 1.070007"
+red_box_basketball_hoop,Pro Basketball Hoop,329.99,Professional grade basketball hoop with tempered glass backboard and breakaway rim,Sports Equipment,Spalding,Basketball,"3.141593 -1.193743 1.073936"
+red_box_tennis_racket,Professional Tennis Racket,149.99,Premium tennis racket with graphite construction and advanced string technology for tournament play,Sports Equipment,Wilson,Tennis,"-7.366979 -2.490737 1.079890"
+red_box_tennis_ball,Championship Tennis Ball,8.99,Premium championship tennis balls with high-grade felt for professional tournaments,Sports Equipment,Penn,Tennis,"-7.374394 -0.133096 1.068885"
+baseball_helmet_001,Pro Baseball Helmet,64.99,Premium batting helmet with advanced impact protection and professional face guard,Sports Equipment,Rawlings,Baseball,none
+baseball_glove_001,Professional Baseball Glove,149.99,Premium leather baseball glove with hand-crafted construction for professional infield play,Sports Equipment,Wilson,Baseball,none
+baseball_jersey_001,Official Team Jersey,89.99,Premium official team jersey with authentic player numbering and professional fit,Sports Equipment,Majestic,Baseball,none
+soccer_shorts_001,Pro Soccer Shorts,34.99,Premium soccer shorts with advanced moisture-wicking technology and professional cut,Sports Equipment,Adidas,Soccer,none
+soccer_goalkeeper_gloves_001,Professional Goalkeeper Gloves,79.99,Premium goalkeeper gloves with latex palm and professional finger protection,Sports Equipment,Nike,Soccer,none
+soccer_team_jersey_001,Official Team Jersey,119.99,Premium official team jersey with authentic sponsor logos and professional grade fabric,Sports Equipment,Puma,Soccer,none
+basketball_shoes_001,Professional Basketball Shoes,189.99,Premium high-top basketball shoes with advanced cushioning and professional ankle support,Sports Equipment,Nike,Basketball,none
+basketball_shorts_001,Pro Basketball Shorts,39.99,Premium mesh basketball shorts with professional team colors and moisture control,Sports Equipment,Spalding,Basketball,none
+basketball_jersey_001,Official NBA Jersey,99.99,Premium official NBA team jersey with authentic player name and professional stitching,Sports Equipment,Nike,Basketball,none
+tennis_shoes_001,Professional Tennis Shoes,179.99,Premium court tennis shoes with advanced lateral support and professional durability,Sports Equipment,Adidas,Tennis,none
+tennis_shorts_001,Pro Tennis Shorts,54.99,Premium performance tennis shorts with built-in compression and professional moisture control,Sports Equipment,Wilson,Tennis,none
+tennis_polo_shirt_001,Professional Tennis Polo,79.99,Premium classic tennis polo shirt with advanced moisture control and professional fit,Sports Equipment,Lacoste,Tennis,none
+baseball_002,Standard Baseball,12.99,Quality synthetic leather baseball suitable for recreational games and practice,Sports Equipment,Rawlings,Baseball,none
+baseball_bat_002,Standard Baseball Bat,34.99,Aluminum baseball bat with good balance for amateur and youth leagues,Sports Equipment,Easton,Baseball,none
+soccer_ball_002,Standard Soccer Ball,19.99,Quality synthetic soccer ball with machine-stitched panels for recreational play,Sports Equipment,Umbro,Soccer,none
+soccer_cleats_002,Standard Soccer Cleats,59.99,Quality soccer cleats with synthetic upper and molded studs for amateur play,Sports Equipment,Puma,Soccer,none
+basketball_002,Standard Basketball,22.99,Quality rubber basketball with good grip for recreational indoor and outdoor play,Sports Equipment,Wilson,Basketball,none
+basketball_hoop_002,Standard Basketball Hoop,149.99,Quality basketball hoop with acrylic backboard and standard rim for home use,Sports Equipment,Lifetime,Basketball,none
+tennis_racket_002,Standard Tennis Racket,59.99,Quality aluminum tennis racket with good control for recreational players,Sports Equipment,Head,Tennis,none
+tennis_ball_002,Standard Tennis Ball,5.99,Quality tennis balls with good bounce for recreational play and practice,Sports Equipment,Dunlop,Tennis,none
+baseball_helmet_002,Standard Baseball Helmet,24.99,Quality batting helmet with basic protection and adjustable fit,Sports Equipment,Easton,Baseball,none
+baseball_glove_002,Standard Baseball Glove,39.99,Quality synthetic baseball glove with good pocket formation for recreational play,Sports Equipment,Rawlings,Baseball,none
+baseball_jersey_002,Standard Team Jersey,29.99,Quality team jersey with screen-printed numbers and comfortable fit,Sports Equipment,Russell Athletic,Baseball,none
+soccer_shorts_002,Standard Soccer Shorts,14.99,Quality soccer shorts with basic moisture-wicking and comfortable fit,Sports Equipment,Umbro,Soccer,none
+soccer_goalkeeper_gloves_002,Standard Goalkeeper Gloves,24.99,Quality goalkeeper gloves with foam palm and basic finger protection,Sports Equipment,Puma,Soccer,none
+soccer_team_jersey_002,Standard Team Jersey,39.99,Quality team jersey with printed logos and comfortable polyester fabric,Sports Equipment,Umbro,Soccer,none
+basketball_shoes_002,Standard Basketball Shoes,69.99,Quality basketball shoes with good cushioning and basic ankle support,Sports Equipment,Reebok,Basketball,none
+basketball_shorts_002,Standard Basketball Shorts,16.99,Quality basketball shorts with basic mesh and team color options,Sports Equipment,Champion,Basketball,none
+basketball_jersey_002,Standard Basketball Jersey,34.99,Quality basketball jersey with printed player details and comfortable fit,Sports Equipment,Champion,Basketball,none
+tennis_shoes_002,Standard Tennis Shoes,79.99,Quality tennis shoes with good court grip and basic lateral support,Sports Equipment,Fila,Tennis,none
+tennis_shorts_002,Standard Tennis Shorts,24.99,Quality tennis shorts with basic performance fabric and comfortable fit,Sports Equipment,Head,Tennis,none
+tennis_polo_shirt_002,Standard Tennis Polo,29.99,Quality tennis polo shirt with basic moisture-wicking and classic design,Sports Equipment,Fila,Tennis,none

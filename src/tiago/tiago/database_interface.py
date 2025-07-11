@@ -329,11 +329,11 @@ class DatabaseInterface(Node):
 def main(args=None):
     rclpy.init(args=args)
     package_share = get_package_share_directory('tiago')
-    map_path = os.path.join(package_share, 'res', 'map.png')
+    map_path = os.path.join(package_share, 'res', 'map.map')
     db_path = os.path.join(package_share, 'res', 'database.db')
 
     database = Database(db_path)
-    map_instance = Map.from_image(map_path)
+    map_instance = Map.from_file(map_path)
     data_interface = DataInterface(database, map_instance)
     database_interface_node = DatabaseInterface(data_interface, map_instance)  # Pass map_instance to the node
 

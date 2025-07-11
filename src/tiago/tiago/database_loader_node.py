@@ -29,6 +29,8 @@ class DatabaseLoaderNode(Node):
         package_share = get_package_share_directory('tiago')
 
         self.db_path = os.path.join(package_share, 'res', 'database.db')
+
+
         self.json_file_path = os.path.join(package_share, 'res', 'shop_inventory.json')
 
         # Create publisher for status updates
@@ -163,6 +165,7 @@ class DatabaseLoaderNode(Node):
                     # categories=staff_info.get('categories', [])
                 )
 
+
                 db.add_staff(staff)
                 loaded_count += 1
                 self.publish_status(f"Loaded staff: {staff.name} ({staff.staff_id})")
@@ -203,6 +206,7 @@ class DatabaseLoaderNode(Node):
                     category=product_info['category']
                 )
 
+
                 db.add_product(product)
                 loaded_count += 1
                 self.publish_status(f"Loaded product: {product.name} ({product.product_id}) - ${product.price}")
@@ -222,6 +226,7 @@ class DatabaseLoaderNode(Node):
                 print(f"  ✗ Error: {error_msg}")
 
         return loaded_count
+
 
     def load_database(self):
         """
@@ -278,7 +283,9 @@ class DatabaseLoaderNode(Node):
             else:
                 print("ℹ️  No product data found in JSON file")
                 self.publish_status("No product data found in JSON file.")
+            # Load areas if present
 
+            # Save database changes
             success_message = f"Database loading complete! Staff: {staff_count}, Products: {product_count}"
             self.publish_status(success_message)
             print(f"🎉 {success_message}\n")

@@ -4,6 +4,7 @@ from rclpy.node import Node
 import os
 import random
 import math
+import traceback  # Import the traceback module
 
 # ROS standard message types
 from nav_msgs.srv import GetPlan
@@ -21,11 +22,13 @@ from ament_index_python.packages import get_package_share_directory
 from tiago.lib.path.astar_path_planner import AStarPathPlanner
 from tiago.srv import PathPlannerCommand
 
+
 class PathPlannerService(Node):
     """
     ROS 2 Node that provides path planning services using an improved A* algorithm.
     The A* planner itself is modified to prioritize paths away from obstacles.
     """
+
     def __init__(self):
         super().__init__('path_planner_service')
         self.get_logger().info(f"Node '{self.get_name()}' has been started.")
@@ -56,7 +59,7 @@ class PathPlannerService(Node):
             package_share_dir = get_package_share_directory('tiago')
             map_filename = self.get_parameter('map_filename').get_parameter_value().string_value
             map_file_path = os.path.join(package_share_dir, 'maps', map_filename)
-            
+
             self.get_logger().info(f"Loading map from: {map_file_path}")
             if not os.path.exists(map_file_path):
                 raise FileNotFoundError(f"Map file not found at: {map_file_path}")
@@ -71,7 +74,7 @@ class PathPlannerService(Node):
         # Create services
         self.plan_service = self.create_service(
             GetPlan, 'plan_path', self.plan_path_callback)
-        
+
         self.command_service = self.create_service(
             PathPlannerCommand, 'path_planner_command', self.handle_path_command)
 
@@ -85,7 +88,7 @@ class PathPlannerService(Node):
             return [transform.transform.translation.x, transform.transform.translation.y]
         except Exception as e:
             self.get_logger().warn(f"Could not get robot position: {e}")
-            return [0.0, 0.0]
+            return None
 
     def _plan_and_smooth_path(self, start_coords, goal_coords):
         """
@@ -95,8 +98,9 @@ class PathPlannerService(Node):
         safety_weight = self.get_parameter('safety_weight').get_parameter_value().double_value
         num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
 
-        self.get_logger().info(f"Planning path from {start_coords} to {goal_coords} with safety_weight={safety_weight}...")
-        
+        self.get_logger().info(
+            f"Planning path from {start_coords} to {goal_coords} with safety_weight={safety_weight}...")
+
         # Call the planner, which now internally handles obstacle avoidance
         raw_path = self.planner.find_path(start_coords, goal_coords, safety_weight=safety_weight)
 
@@ -106,32 +110,36 @@ class PathPlannerService(Node):
 
         # Smoothing is now mostly for aesthetics, so collision_threshold can be small.
         smoothed_path = self.planner.smooth_path(raw_path, num_points=num_points, collision_threshold=0.1)
-        
+
         # Return the smoothed path if available, otherwise fall back to the raw (but safe) A* path
         return smoothed_path if smoothed_path else raw_path
 
     def generate_random_walk_path(self):
         """Generates a path to a single randomly selected waypoint using the safety-aware A* algorithm."""
         predefined_waypoints = [
-            [0, -4.0], [0, 3.5], [-5.5, 0], [5.5, 0], [0, 0]
+            [100, 100], [200, 600], [550,550], [550,100], [900,100], [900, 600], [200, 600]
         ]
-        
+
         current_pos = self.get_robot_position()
-        
-        reachable_waypoints = [wp for wp in predefined_waypoints if self.planner.is_valid_point(wp)]
-        
+
+        if current_pos is None:
+            self.get_logger().warn("Could not get current robot position for random walk.")
+            return None
+
+        reachable_waypoints = [wp for wp in predefined_waypoints if self.planner._is_valid_cell(wp[0],wp[1])]
+
         if not reachable_waypoints:
             self.get_logger().warn("No valid waypoints for random walk.")
             return self.create_path_message([])
 
         random_target = random.choice(reachable_waypoints)
-        
+
         final_path_points = self._plan_and_smooth_path(current_pos, random_target)
 
         if not final_path_points:
             self.get_logger().warn(f"Could not generate random walk path to {random_target}.")
             return self.create_path_message([])
-        
+
         self.get_logger().info(f"Generated A* random walk path with {len(final_path_points)} points.")
         return self.create_path_message(final_path_points)
 
@@ -148,34 +156,42 @@ class PathPlannerService(Node):
             pose.pose.position.y = point[1]
             pose.pose.orientation.w = 1.0
             ros_path.poses.append(pose)
-        
+
         return ros_path
 
     def handle_path_command(self, request, response):
         """Handle PathPlannerCommand service requests."""
         command = request.command
         self.get_logger().info(f"Received path command: {command}")
-        
+
         if command == "random_walk":
             try:
                 random_path = self.generate_random_walk_path()
+                if not random_path:
+                    self.get_logger().warn("Failed to generate random walk path.")
+                    response.success = False
+                    return response
                 if not random_path.poses:
                     raise ValueError("Failed to generate a valid random walk path.")
-                
+
                 self.path_publisher.publish(random_path)
                 self.publish_status("started_random_walk")
                 response.success = True
-                response.message = "Random walk path generated and published"
             except Exception as e:
-                self.get_logger().error(f"Failed to generate random walk: {e}", exc_info=True)
+                # Modified: Use traceback.format_exc() to include full traceback
+                error_detail = traceback.format_exc()
+                self.get_logger().error(f"Failed to generate random walk: {e}\n{error_detail}")
                 response.success = False
-                response.message = f"Failed to generate random walk: {e}"
-        
+
         elif command == "go_to_location":
             try:
                 current_pos = self.get_robot_position()
+                if current_pos is None:
+                    self.get_logger().warn("Could not get current robot position for go_to_location.")
+                    response.success = False
+                    return response
                 target_pos = [request.location.x, request.location.y]
-                
+
                 final_path_points = self._plan_and_smooth_path(current_pos, target_pos)
 
                 if final_path_points:
@@ -183,35 +199,30 @@ class PathPlannerService(Node):
                     self.path_publisher.publish(ros_path)
                     self.publish_status("started_navigation")
                     response.success = True
-                    response.message = f"Path to location [{target_pos[0]:.2f}, {target_pos[1]:.2f}] generated"
                 else:
                     response.success = False
-                    response.message = "No path found to target location"
             except Exception as e:
-                self.get_logger().error(f"Failed to plan path to location: {e}", exc_info=True)
+                # Modified: Use traceback.format_exc() to include full traceback
+                error_detail = traceback.format_exc()
+                self.get_logger().error(f"Failed to plan path to location: {e}\n{error_detail}")
                 response.success = False
-                response.message = f"Failed to plan path: {e}"
-        
+
         elif command == "stop_movement":
             try:
                 if self.controller_stop_client.service_is_ready():
                     self.controller_stop_client.call_async(Trigger.Request())
                     self.publish_status("stopped")
                     response.success = True
-                    response.message = "Stop command sent to controller"
                 else:
                     self.get_logger().warn("Controller stop service not available")
                     response.success = False
-                    response.message = "Controller stop service not available"
             except Exception as e:
                 self.get_logger().error(f"Failed to stop movement: {e}")
                 response.success = False
-                response.message = f"Failed to stop movement: {e}"
-        
+
         else:
             response.success = False
-            response.message = f"Unknown command: {command}"
-        
+
         return response
 
     def publish_status(self, status):
@@ -227,7 +238,7 @@ class PathPlannerService(Node):
         goal_coords = [request.goal.pose.position.x, request.goal.pose.position.y]
 
         final_path_points = self._plan_and_smooth_path(start_coords, goal_coords)
-        
+
         if final_path_points:
             response.plan = self.create_path_message(final_path_points)
             self.get_logger().info("Successfully planned and returned path.")
@@ -237,8 +248,9 @@ class PathPlannerService(Node):
             response.plan = Path()
             response.plan.header.stamp = self.get_clock().now().to_msg()
             response.plan.header.frame_id = self.map_frame
-            
+
         return response
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -248,14 +260,20 @@ def main(args=None):
         rclpy.spin(path_planner_service)
     except Exception as e:
         if path_planner_service:
-            path_planner_service.get_logger().fatal(f"A critical error occurred: {e}", exc_info=True)
+            # ORIGINAL LINE: path_planner_service.get_logger().fatal(f"A critical error occurred: {e}", exc_info=True)
+            # FIX: Format the exception info into the message string
+            error_message = f"A critical error occurred: {e}\n{traceback.format_exc()}"
+            path_planner_service.get_logger().fatal(error_message)
         else:
             print(f"Critical error during node initialization: {e}")
+            # Also add traceback for initial errors if path_planner_service is not yet initialized
+            print(traceback.format_exc())
     finally:
         if path_planner_service:
             path_planner_service.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

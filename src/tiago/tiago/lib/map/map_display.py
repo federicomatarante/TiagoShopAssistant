@@ -9,6 +9,7 @@ from tkinter import simpledialog, Tk, Listbox, Button as TkButton, Toplevel, END
 import datetime
 import sys
 import os
+# Add at the top of your file
 
 
 class MapDisplay:
@@ -39,8 +40,8 @@ class MapDisplay:
         self.buttons = {}  # Store button references
 
         # Import needed classes here to avoid circular imports
-        from src.tiago.src.map.geometry import Point2D
-        from src.tiago.src.map.geometry import Polygon
+        from tiago.lib.geometry import Point2D
+        from tiago.lib.geometry import Polygon
         self.Point2D = Point2D
         self.Polygon = Polygon
 
@@ -78,6 +79,7 @@ class MapDisplay:
         Sets up the interactive display with clickable map and action buttons.
         """
         # Create a figure with appropriate size for buttons at bottom
+        plt.ion()
         self.fig = plt.figure(figsize=(self.cols / 4, self.rows / 4 + 1.5))  # Increased height for additional buttons
 
         # Create main map axis (slightly smaller to make room for buttons)

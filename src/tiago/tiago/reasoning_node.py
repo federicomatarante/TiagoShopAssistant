@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import time
 from enum import Enum
 import math
 
@@ -77,9 +78,35 @@ class ReasoningNode(Node):
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
         # Start random walk
-        self.send_path_command("random_walk")
-        self.get_logger().info("Node initialized - starting random walk")
+        self.initialize_random_walk()
 
+
+    def initialize_random_walk(self):
+        # Start random walk
+        self.get_logger().info("Attempting to start random walk...")
+        path_command_successful = False
+        while not path_command_successful:
+            future = self.send_path_command("random_walk")
+            rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)  # Spin and wait for the service response
+
+            if future.done():
+                try:
+                    response = future.result()
+                    if response is not None and response.success:
+                        self.get_logger().info("Random walk command successfully sent and acknowledged.")
+                        path_command_successful = True
+                    else:
+                        self.get_logger().warn(f"Random walk command failed with response: {response}. Retrying in 5 seconds...")
+                        time.sleep(5)
+
+                except Exception as e:
+                    self.get_logger().error(f"Service call failed: {e}. Retrying random walk...")
+            else:
+                self.get_logger().warn("Path planner service call timed out. Retrying random walk...")
+            # Small delay before retrying to avoid spamming the service
+            rclpy.spin_once(self, timeout_sec=5)
+
+        self.get_logger().info("Node initialized - starting random walk")
     def update_robot_position(self):
         """Update robot position using TF2."""
         try:

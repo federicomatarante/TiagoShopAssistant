@@ -250,7 +250,7 @@ class Map:
     @staticmethod
     def from_file(path: str) -> "Map":
         def dict_to_point(d: Dict) -> Point2D:
-            return Point2D(d["x"], d["y"])
+            return Point2D(float(d["x"]), float(d["y"]))
 
         def dict_to_polygon(d: Dict) -> Polygon:
             return Polygon([dict_to_point(p) for p in d["vertices"]])
