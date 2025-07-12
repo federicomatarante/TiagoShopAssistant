@@ -38,7 +38,7 @@ class PathPlannerService(Node):
         # It's passed to the A* algorithm to penalize paths close to obstacles.
         # Higher values create safer, more central paths.
         self.declare_parameter('safety_weight', 5.0)
-        self.declare_parameter('smoothing_points', 40)
+        self.declare_parameter('smoothing_points',20)
         self.declare_parameter('map_filename', 'my_map.yaml')
 
         # Publishers
@@ -121,7 +121,7 @@ class PathPlannerService(Node):
             [0, 3.5, 0.0],    # Opposite to the entrance
             [-5.5, 0, 0.0],    # Left aisle
             [5.5, 0, 0.0],   # Right aisle
-            [0, 0, 0.0],
+            # [0, 0, 0.0],
         ]
 
         current_pos = self.get_robot_position()

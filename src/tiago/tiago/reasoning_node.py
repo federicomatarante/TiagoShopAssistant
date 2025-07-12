@@ -20,16 +20,23 @@ class TiagoState(Enum):
     IDLE = "IDLE"
     CONVERSATION = "CONVERSATION"
     WALKING_TO_AREA = "WALKING_TO_AREA"
+    AUTONOMOUS_SEQUENCE = "AUTONOMOUS_SEQUENCE"  # New state for autonomous behavior
 
 
 class ReasoningNode(Node):
     def __init__(self):
         super().__init__('reasoning_node')
-        self.state = TiagoState.IDLE
+        self.state = TiagoState.AUTONOMOUS_SEQUENCE  # Start in autonomous mode
         self.current_person_id = None
         self.robot_position = Point()
 
-        self.get_logger().info("Starting TiaGo Reasoning Node")
+        # Autonomous sequence tracking
+        self.random_walk_count = 0
+        self.max_random_walks = 2
+        self.final_position = Point(x=-5.0, y=-3.5, z=0.0)
+        self.sequence_completed = False
+
+        self.get_logger().info("Starting TiaGo Reasoning Node with autonomous sequence")
 
         # TF2 for robot position tracking
         self.tf_buffer = Buffer()
@@ -77,36 +84,60 @@ class ReasoningNode(Node):
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
-        # Start random walk
-        self.initialize_random_walk()
+        # Start autonomous sequence
+        self.start_autonomous_sequence()
 
+    def start_autonomous_sequence(self):
+        """Start the autonomous sequence with random walks followed by fixed position."""
+        self.get_logger().info("Starting autonomous sequence: 2 random walks + final position")
+        self.execute_next_random_walk()
 
-    def initialize_random_walk(self):
-        # Start random walk
-        self.get_logger().info("Attempting to start random walk...")
-        path_command_successful = False
-        while not path_command_successful:
-            future = self.send_path_command("random_walk")
-            rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)  # Spin and wait for the service response
+    def execute_next_random_walk(self):
+        """Execute the next random walk in the sequence."""
+        if self.random_walk_count < self.max_random_walks:
+            self.random_walk_count += 1
+            self.get_logger().info(f"Starting random walk {self.random_walk_count}/{self.max_random_walks}")
+            
+            path_command_successful = False
+            while not path_command_successful:
+                future = self.send_path_command("random_walk")
+                rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
 
-            if future.done():
-                try:
-                    response = future.result()
-                    if response is not None and response.success:
-                        self.get_logger().info("Random walk command successfully sent and acknowledged.")
-                        path_command_successful = True
-                    else:
-                        self.get_logger().warn(f"Random walk command failed with response: {response}. Retrying in 5 seconds...")
-                        time.sleep(5)
+                if future.done():
+                    try:
+                        response = future.result()
+                        if response is not None and response.success:
+                            self.get_logger().info(f"Random walk {self.random_walk_count} command successfully sent")
+                            path_command_successful = True
+                        else:
+                            self.get_logger().warn(f"Random walk {self.random_walk_count} command failed. Retrying in 5 seconds...")
+                            time.sleep(5)
+                    except Exception as e:
+                        self.get_logger().error(f"Service call failed: {e}. Retrying random walk...")
+                else:
+                    self.get_logger().warn("Path planner service call timed out. Retrying random walk...")
+                
+                rclpy.spin_once(self, timeout_sec=5)
+        else:
+            self.execute_final_position()
 
-                except Exception as e:
-                    self.get_logger().error(f"Service call failed: {e}. Retrying random walk...")
-            else:
-                self.get_logger().warn("Path planner service call timed out. Retrying random walk...")
-            # Small delay before retrying to avoid spamming the service
-            rclpy.spin_once(self, timeout_sec=5)
+    def execute_final_position(self):
+        """Navigate to the final fixed position."""
+        self.get_logger().info(f"All random walks completed. Going to final position: [{self.final_position.x}, {self.final_position.y}, {self.final_position.z}]")
+        
+        future = self.send_path_command("go_to_location", self.final_position)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+        
+        if future.done():
+            try:
+                response = future.result()
+                if response is not None and response.success:
+                    self.get_logger().info("Final position command successfully sent")
+                else:
+                    self.get_logger().warn("Final position command failed")
+            except Exception as e:
+                self.get_logger().error(f"Final position service call failed: {e}")
 
-        self.get_logger().info("Node initialized - starting random walk")
     def update_robot_position(self):
         """Update robot position using TF2."""
         try:
@@ -131,12 +162,28 @@ class ReasoningNode(Node):
 
     # Callbacks
     def on_path_status(self, msg):
-        if msg.data == "finished" and self.state == TiagoState.WALKING_TO_AREA:
-            self.get_logger().info("Reached area - resuming conversation")
-            self.send_hri_command("resume_conversation")
-            self.state = TiagoState.CONVERSATION
+        if msg.data == "finished":
+            if self.state == TiagoState.AUTONOMOUS_SEQUENCE:
+                if self.random_walk_count < self.max_random_walks:
+                    self.get_logger().info(f"Random walk {self.random_walk_count} completed")
+                    # Wait a bit before starting next random walk
+                    time.sleep(2)
+                    self.execute_next_random_walk()
+                elif not self.sequence_completed:
+                    self.get_logger().info("Final position reached! Autonomous sequence completed.")
+                    self.sequence_completed = True
+                    self.state = TiagoState.IDLE
+                    self.get_logger().info("Switching to normal operation mode (IDLE)")
+            elif self.state == TiagoState.WALKING_TO_AREA:
+                self.get_logger().info("Reached area - resuming conversation")
+                self.send_hri_command("resume_conversation")
+                self.state = TiagoState.CONVERSATION
 
     def on_person_detected(self, msg):
+        # Only respond to person detection if not in autonomous sequence
+        if self.state == TiagoState.AUTONOMOUS_SEQUENCE:
+            return
+            
         distance = self.get_distance_class(msg.position)
 
         if self.state == TiagoState.IDLE and distance == "close":
