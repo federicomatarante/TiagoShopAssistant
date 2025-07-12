@@ -117,7 +117,11 @@ class PathPlannerService(Node):
     def generate_random_walk_path(self):
         """Generates a path to a single randomly selected waypoint using the safety-aware A* algorithm."""
         predefined_waypoints = [
-            [100, 100], [200, 600], [550,550], [550,100], [900,100], [900, 600], [200, 600]
+            [0, -4.0, 0.0],    # Near entrance
+            [0, 3.5, 0.0],    # Opposite to the entrance
+            [-5.5, 0, 0.0],    # Left aisle
+            [5.5, 0, 0.0],   # Right aisle
+            [0, 0, 0.0],
         ]
 
         current_pos = self.get_robot_position()
