@@ -51,6 +51,7 @@ class SimpleNavigationController(Node):
     def __init__(self):
         super().__init__('simple_navigation_controller')
         self.get_logger().info("Simple Navigation Controller node has been started.")
+        time.sleep(30.0)  # Wait for Gazebo to start up
 
         # --- Parameters ---
         self.declare_parameter('goal_tolerance', 0.1)
@@ -72,7 +73,9 @@ class SimpleNavigationController(Node):
         # --- Nav2 Action Client ---
         self._nav_action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.get_logger().info("NavigateToPose action client created.")
-        self._check_nav_server_ready()
+        # Give Gazebo time to start up (20+ seconds)
+        if not self._check_nav_server_ready(timeout_sec=30.0):
+            self.get_logger().warn("Nav2 server not ready at startup. Will wait for it when needed.")
 
         # --- Subscribers ---
         self.path_subscriber = self.create_subscription(
@@ -176,8 +179,8 @@ class SimpleNavigationController(Node):
         if not self.current_path or self.target_waypoint_index >= len(self.current_path):
             return False
 
-        if not self._check_nav_server_ready(timeout_sec=1.0):
-            self.get_logger().error("Navigation server not ready, cannot send goal.")
+        if not self._check_nav_server_ready(timeout_sec=10.0):
+            self.get_logger().warn("Navigation server not ready, will retry later.")
             return False
 
         target_waypoint = self.current_path[self.target_waypoint_index]
