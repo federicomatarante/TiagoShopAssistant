@@ -32,9 +32,9 @@ bond==4.1.2
 breezy==3.2.1
 Brotli==1.0.9
 builtin-interfaces==1.2.1
-# catkin==0.8.10
-# catkin-pkg==1.0.0
-# catkin-pkg-modules==1.0.0
+catkin==0.8.10
+catkin-pkg==1.0.0
+catkin-pkg-modules==1.0.0
 certifi==2020.6.20
 chardet==4.0.0
 click==8.0.3
@@ -70,8 +70,8 @@ composition-interfaces==1.2.1
 configobj==5.0.6
 constantly==15.1.0
 control-msgs==4.8.0
-# controller-manager==2.51.0
-# controller-manager-msgs==2.50.0
+controller-manager==2.51.0
+controller-manager-msgs==2.50.0
 cov-core==1.15.0
 coverage==6.2
 cryptography==3.4.8
@@ -143,7 +143,7 @@ lark==1.1.1
 laser-geometry==2.4.0
 launch==1.0.8
 # Editable install with no version control (launch-pal==0.12.1)
-# -e /home/jesus/tiago_public_ws/build/launch_pal
+-e /home/jesus/tiago_public_ws/build/launch_pal
 launch-param-builder==0.1.1
 launch-ros==0.19.9
 launch-testing==1.0.8
@@ -389,3 +389,4 @@ wrapt==1.13.3
 xacro==2.0.13
 zipp==1.0.0
 zope.interface==5.4.0
+

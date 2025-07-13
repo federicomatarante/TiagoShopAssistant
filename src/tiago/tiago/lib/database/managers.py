@@ -25,7 +25,6 @@ class CosineDistanceCalculator(SimilarityCalculator):
     def similarity_score(self, embeddings_a: np.ndarray, embeddings_b: np.ndarray):
         embeddings_a_tensor = torch.from_numpy(embeddings_a)
         embeddings_b_tensor = torch.from_numpy(embeddings_b)
-
         if embeddings_a_tensor.device != self.device:
             embeddings_a_tensor = embeddings_a_tensor.to(self.device)
         if embeddings_b_tensor.device != self.device:
@@ -35,9 +34,11 @@ class CosineDistanceCalculator(SimilarityCalculator):
 
 
 class EmbeddingsManager:
-    def __init__(self, model_name='paraphrase-MiniLM-L6-v2', threshold: float = 0.7):
+    def __init__(self, model_name='paraphrase-MiniLM-L6-v2', threshold: float = 0.7,
+                 distance_calculator: SimilarityCalculator = CosineDistanceCalculator()):
         self.model = SentenceTransformer(model_name)
         self.threshold = threshold
+        self.distance_calculator = distance_calculator
 
     def create_embeddings(self, sentences: List[str]) -> np.ndarray:
         if not sentences:
@@ -50,20 +51,26 @@ class EmbeddingsManager:
         is similar to any in embeddings_b based on cosine similarity.
         """
         if embeddings_a is None or embeddings_b is None or embeddings_a.size == 0 or embeddings_b.size == 0:
-            return np.array([], dtype=int)
-        similarity_matrix = np.dot(embeddings_a, embeddings_b.T)  # cosine similarity
+            raise ValueError("Embeddings cannot be None or empty.")
+        similarity_matrix = self.distance_calculator.similarity_score(embeddings_a, embeddings_b)
         return np.array([int(np.any(row >= self.threshold)) for row in similarity_matrix])
 
 
 class ProductRecommender:
     def __init__(self, all_products, embeddings_manager: EmbeddingsManager = None):
         self.embeddings_manager = embeddings_manager or EmbeddingsManager()
-        self.product_names_emb = np.stack([product.embedded_name for product in all_products] if all_products else np.empty((0, 0)))
-        self.product_descriptions_emb = np.stack([product.embedded_description for product in all_products] if all_products else np.empty((0, 0)))
-        self.product_categories_emb = np.stack([product.embedded_category for product in all_products] if all_products else np.empty((0, 0)))
-        self.product_embedded_brands = np.stack([product.embedded_brand for product in all_products] if all_products else np.empty((0, 0)))
-        self.product_embedded_sport_categories = np.stack([product.embedded_sport_category for product in all_products] if all_products else np.empty((0, 0)))
+        # TODO debug:
 
+        self.product_names_emb = np.stack(
+            [product.embedded_name for product in all_products]) if all_products else np.empty((0, 0))
+        self.product_descriptions_emb = np.stack(
+            [product.embedded_description for product in all_products]) if all_products else np.empty((0, 0))
+        self.product_categories_emb = np.stack(
+            [product.embedded_category for product in all_products]) if all_products else np.empty((0, 0))
+        self.product_embedded_brands = np.stack(
+            [product.embedded_brand for product in all_products]) if all_products else np.empty((0, 0))
+        self.product_embedded_sport_categories = np.stack(
+            [product.embedded_sport_category for product in all_products]) if all_products else np.empty((0, 0))
         self.all_products = all_products
 
     def get_products(self, product_request: Dict[str, str], max_products=5) -> List[Product]:
@@ -87,11 +94,10 @@ class ProductRecommender:
             for value in values:
                 if not value:
                     continue
-                query_emb = self.embeddings_manager.create_embeddings([value])[0]
+                query_emb = self.embeddings_manager.create_embeddings([value, ])[0]
                 mask = self.embeddings_manager.compare_embeddings(stored_embs, query_emb)
                 indices = np.where(mask == 1)[0]
                 final_indices.extend([index for index in indices if index not in final_indices])
-
         filtered_products = [self.all_products[i] for i in final_indices]
         if 'price_range' in product_request and product_request['price_range']:
             price_range = product_request['price_range']
@@ -115,7 +121,8 @@ class StaffRecommender:
     def __init__(self, all_staff, embeddings_manager: EmbeddingsManager = None):
         self.embeddings_manager = embeddings_manager or EmbeddingsManager()
         self.staff_names_emb = np.stack([staff.embedded_name for staff in all_staff]) if all_staff else np.empty((0, 0))
-        self.staff_categories_emb = [staff.embedded_categories for staff in all_staff]
+        self.staff_categories_emb = np.stack(
+            [staff.embedded_categories for staff in all_staff] if all_staff else np.empty((0, 0)))
         self.staff_roles_emb = np.stack([staff.embedded_role for staff in all_staff]) if all_staff else np.empty((0, 0))
         self.all_staff = all_staff
 
@@ -149,13 +156,9 @@ class StaffRecommender:
                 if not value:
                     continue
                 query_emb = self.embeddings_manager.create_embeddings([value])[0]
-                for idx, staff_cats in enumerate(self.staff_categories_emb):
-                    # staff_cats is a list of embeddings
-                    for cat_emb in staff_cats:
-                        match = self.embeddings_manager.compare_embeddings(np.array([cat_emb]), query_emb)
-                        if match[0] == 1 and idx not in final_indices:
-                            final_indices.append(idx)
-                            break  # stop checking other categories for this staff once matched
+                mask = self.embeddings_manager.compare_embeddings(self.staff_categories_emb, query_emb)
+                indices = np.where(mask == 1)[0]
+                final_indices.extend([index for index in indices if index not in final_indices])
 
         filtered_staff = [self.all_staff[i] for i in final_indices]
         return filtered_staff[:max_staff] if len(filtered_staff) > max_staff else filtered_staff

@@ -2,5 +2,5 @@
 tiago/StaffQuery query
 ---
 bool success
-tiago/Staff[] products
+tiago/Staff[] staff
 string[] areas

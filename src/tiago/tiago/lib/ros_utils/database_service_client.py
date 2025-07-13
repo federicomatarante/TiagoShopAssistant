@@ -53,7 +53,7 @@ class DatabaseServiceClient:
 
         self.node.get_logger().info("Service clients set up")
 
-    def wait_for_services(self, timeout_sec: float = 10.0) -> bool:
+    def wait_for_services(self, timeout_sec: float = 30.0) -> bool:
         """Wait for all required services to become available"""
         services = [
             self.get_customer_info_client,

@@ -63,7 +63,7 @@ class StaffModel(Base):
 
     staff_id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
-    categories = Column(JSON)
+    categories = Column(String)
     role = Column(String)
 
     # Embeddings
@@ -75,7 +75,7 @@ class StaffModel(Base):
         return Staff(
             staff_id=self.staff_id,
             name=self.name,
-            categories=self.categories or [],
+            categories=self.categories,
             role=self.role,
             embedded_name=pickle.loads(self.embedded_name) if self.embedded_name else None,
             embedded_role=pickle.loads(self.embedded_role) if self.embedded_role else None,

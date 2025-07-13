@@ -35,7 +35,7 @@ class Product:
 class Staff:
     staff_id: str
     name: Optional[str] = None
-    categories: List[str] = field(default_factory=list)
+    categories: Optional[str] = None
     role: Optional[str] = None
 
     embedded_name: Optional[np.ndarray] = None

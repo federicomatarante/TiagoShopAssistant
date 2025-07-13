@@ -35,10 +35,10 @@ def customer_to_msg(customer: Customer) -> CustomerMsg:
         name=customer.name or "",
         age_category=customer.age_category or "",
         gender=customer.gender or "",
-        preferences=customer.preferences or [], # Ensure preferences is a list
+        preferences=customer.preferences or "", # Ensure preferences is a list
         size_information=customer.size_information or "",
         budget=customer.budget or "",
-        products_of_interest=customer.products_of_interest or [], # Ensure products_of_interest is a list
+        products_of_interest=customer.products_of_interest or "", # Ensure products_of_interest is a list
         purchase_intent=customer.purchase_intent or "",
         follow_up_needed=customer.follow_up_needed if customer.follow_up_needed is not None else False,
         conversation_summary=customer.conversation_summary or "",
@@ -399,7 +399,7 @@ def dict_to_customer_info(customer_info_dict: dict) -> CustomerMsg:
     elif isinstance(preferences, list):
         customer_msg.preferences = preferences
     else:
-        customer_msg.preferences = []
+        customer_msg.preferences = ""
 
     # Handle products_of_interest (convert from string to list if needed)
     products_of_interest = customer_info_dict.get('products_of_interest', [])

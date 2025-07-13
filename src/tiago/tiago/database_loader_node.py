@@ -16,6 +16,8 @@ from ament_index_python.packages import get_package_share_directory
 from tiago.lib.database.entities import Product, Staff
 from tiago.lib.database.database import Database
 
+from tiago.lib.database.managers import EmbeddingsManager
+
 
 class DatabaseLoaderNode(Node):
     """
@@ -29,7 +31,7 @@ class DatabaseLoaderNode(Node):
         package_share = get_package_share_directory('tiago')
 
         self.db_path = os.path.join(package_share, 'res', 'database.db')
-
+        self.embedder = EmbeddingsManager()
 
         self.json_file_path = os.path.join(package_share, 'res', 'shop_inventory.json')
 
@@ -161,6 +163,10 @@ class DatabaseLoaderNode(Node):
                     staff_id=staff_info['staff_id'],
                     name=staff_info['name'],
                     role=staff_info['role'],
+                    categories=staff_info['categories'],
+                    embedded_name=self.embedder.create_embeddings([staff_info['name'],])[0],
+                    embedded_role=self.embedder.create_embeddings([staff_info['role'],])[0],
+                    embedded_categories=self.embedder.create_embeddings([staff_info['categories'],])[0],
                     # If your Staff entity has a categories field, uncomment the next line
                     # categories=staff_info.get('categories', [])
                 )
@@ -203,7 +209,12 @@ class DatabaseLoaderNode(Node):
                     name=product_info['name'],
                     price=float(product_info['price']),
                     description=product_info['description'],
-                    category=product_info['category']
+                    category=product_info['category'],
+                    embedded_name=self.embedder.create_embeddings([product_info['name'],])[0],
+                    embedded_description=self.embedder.create_embeddings([product_info['description'],])[0],
+                    embedded_category=self.embedder.create_embeddings([product_info['category'],])[0],
+                    embedded_brand=self.embedder.create_embeddings([product_info.get('brand', '')])[0],
+                    embedded_sport_category=self.embedder.create_embeddings([product_info.get('sport_category', '')])[0],
                 )
 
 
@@ -256,6 +267,7 @@ class DatabaseLoaderNode(Node):
 
             # Initialize database
             db = Database(db_path=db_path)
+            db.delete()
             self.publish_status("Database initialized successfully.")
 
             # Load data

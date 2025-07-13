@@ -8,122 +8,145 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
-from tiago.msg import ConversationStatus
+from tiago.msg import ConversationStatus  # Import ConversationStatus message for monitoring
+from tiago.srv import HRICommand  # Import HRICommand service for sending commands
 
 
 class ConversationSimulator(Node):
     def __init__(self):
         super().__init__('conversation_simulator')
 
-        # State tracking
+        # State tracking for the simulator's internal representation
         self.conversation_active = False
         self.current_customer_id: Optional[str] = None
 
         # Setup ROS communication
         self._setup_ros_communication()
 
-        # Start input thread
+        # Start input thread to handle user commands and speech input
         self.input_thread = threading.Thread(target=self._input_loop, daemon=True)
         self.input_thread.start()
 
-        self.get_logger().info("Conversation Simulator initialized")
+        self.get_logger().info("Conversation Simulator initialized and ready.")
         self._print_help()
 
     def _setup_ros_communication(self):
-        """Setup ROS2 publishers and subscribers"""
+        """Sets up all ROS 2 publishers, subscribers, and service clients."""
 
-        # Publisher to send controller commands
-        self.controller_publisher = self.create_publisher(
-            ConversationStatus,
-            '/conversation/controller',
-            10
-        )
-
-        # Publisher to simulate speech recognition input
+        # Publisher for simulated speech recognition input (to ConversationNode)
         self.speech_publisher = self.create_publisher(
             String,
             '/speech/recognized_text',
             10
         )
 
-        # Subscriber to receive TTS output (assistant responses)
+        # Service client to send control commands to ConversationNode
+        # The ConversationNode expects HRICommand service calls on this topic.
+        self.controller_client = self.create_client(
+            HRICommand,
+            '/conversation/controller'
+        )
+
+        # Subscriber to receive TTS output from ConversationNode (assistant responses)
         self.tts_subscriber = self.create_subscription(
             String,
             '/speech/tts_input',
-            self.tts_callback,
+            self._tts_callback,
             10
         )
 
-        # NEW: Subscriber to monitor walk area commands
-        self.walk_area_subscriber = self.create_subscription(
-            String,
-            '/navigation/walk_to_area',
-            self.walk_area_callback,
+        # Subscriber to monitor walk area commands from ConversationNode
+        # Note: ConversationNode now publishes ConversationStatus with area field for walk commands.
+        # This subscriber needs to be updated to listen to /conversation/status and extract the area.
+        self.conversation_status_subscriber = self.create_subscription(
+            ConversationStatus,
+            '/conversation/status',
+            self._conversation_status_callback,
             10
         )
 
-        # NEW: Service client to test status service
+
+        # Service client to check if ConversationNode is online
         self.status_client = self.create_client(Trigger, '/conversation/status')
 
-    def tts_callback(self, msg: String):
-        """Handle TTS output from the conversation node"""
+
+    def _tts_callback(self, msg: String):
+        """Handles text-to-speech output received from the ConversationNode."""
         print(f"\n🤖 Assistant: {msg.data}")
         if self.conversation_active:
-            print("You: ", end="", flush=True)
+            print("You: ", end="", flush=True) # Prompt for next user input
 
-    def walk_area_callback(self, msg: String):
-        """Handle walk area commands from the conversation node"""
-        print(f"\n🚶 Walk Command: Navigate to area '{msg.data}'")
+    def _conversation_status_callback(self, msg: ConversationStatus):
+        """Handles conversation status updates, including walk commands."""
+        if msg.status == "walk_to_area" and msg.area:
+            print(f"\n🚶 Walk Command: Navigate to area '{msg.area}'")
+        elif msg.status == "finished":
+            print("\n✅ ConversationNode reported conversation finished.")
+            self.conversation_active = False
+            self.current_customer_id = None
+            print("Command: ", end="", flush=True) # Return to command prompt
+        else:
+            self.get_logger().info(f"Received ConversationNode status: {msg.status} (Area: {msg.area})")
+
         if self.conversation_active:
-            print("You: ", end="", flush=True)
+            print("You: ", end="", flush=True) # Prompt for next user input
+
 
     def _print_help(self):
-        """Print available commands"""
+        """Displays the list of available commands and monitoring information."""
         print("\n" + "=" * 70)
-        print("🎯 CONVERSATION SIMULATOR WITH MONITORING")
+        print("🎯 CONVERSATION SIMULATOR (Compatible with your ConversationNode)")
         print("=" * 70)
         print("Commands:")
-        print("  /start <customer_id>  - Start conversation with customer")
-        print("  /stop                 - Stop current conversation")
-        print("  /status               - Check conversation node status")
-        print("  /monitor              - Show monitoring info")
-        print("  /help                 - Show this help")
-        print("  /quit                 - Exit simulator")
-        print("\nOnce conversation is started, type messages to chat!")
-        print("\n📡 Monitoring:")
-        print("  • TTS responses: /speech/tts_input")
-        print("  • Walk commands: /navigation/walk_to_area")
-        print("  • Status service: /conversation/status")
+        print("  /start <customer_id> [category] - Start a new conversation. Category defaults to 'customer'.")
+        print("  /stop                          - Stop the current conversation.")
+        print("  /pause                         - Pause the current conversation.")
+        print("  /resume                        - Resume a paused conversation.")
+        print("  /status                        - Check if ConversationNode is online.")
+        print("  /monitor                       - Show current monitoring information.")
+        print("  /help                          - Display this help message.")
+        print("  /quit                          - Exit the simulator.")
+        print("\nOnce a conversation is started, simply type your messages to chat!")
+        print("\n📡 Monitoring (Simulator receives):")
+        print("  • TTS responses:         /speech/tts_input")
+        print("  • Conversation Status:   /conversation/status (includes walk commands)")
+        print("\n💬 Commands (Simulator sends):")
+        print("  • Speech Input:          /speech/recognized_text")
+        print("\n⚙️ Services (Simulator uses to send commands):")
+        print("  • Control Commands:      /conversation/controller (HRICommand service)")
+        print("  • Conversation Status:   /conversation/status (Trigger service)")
         print("=" * 70)
 
     def _input_loop(self):
-        """Handle user input in a separate thread"""
+        """Manages user input in a separate thread, handling commands or speech."""
         while True:
             try:
+                # Prompt depends on whether a conversation is active
                 if self.conversation_active:
                     user_input = input("You: ").strip()
                 else:
                     user_input = input("Command: ").strip()
 
                 if not user_input:
-                    continue
+                    continue # Ignore empty inputs
 
-                # Handle commands
+                # Check if the input is a simulator command (starts with '/')
                 if user_input.startswith('/'):
-                    self._handle_command(user_input)
+                    self._handle_simulator_command(user_input)
+                # Otherwise, if a conversation is active, send it as speech input
                 elif self.conversation_active:
-                    # Send as speech input
                     self._send_speech_input(user_input)
+                # If not a command and no conversation is active, inform the user
                 else:
                     print("❌ No active conversation. Use /start <customer_id> to begin.")
 
             except (EOFError, KeyboardInterrupt):
-                print("\n👋 Exiting...")
-                os._exit(0)
+                print("\n👋 Exiting Conversation Simulator...")
+                os._exit(0) # Force exit cleanly for thread safety
 
-    def _handle_command(self, command: str):
-        """Handle simulator commands"""
-        parts = command.split()
+    def _handle_simulator_command(self, command_string: str):
+        """Processes internal simulator commands."""
+        parts = command_string.split()
         cmd = parts[0].lower()
 
         if cmd == '/help':
@@ -135,125 +158,130 @@ class ConversationSimulator(Node):
 
         elif cmd == '/start':
             if len(parts) < 2:
-                print("❌ Usage: /start <customer_id>")
+                print("❌ Usage: /start <customer_id> [category]")
                 return
-
             customer_id = parts[1]
-            self._start_conversation(customer_id)
+            category = parts[2] if len(parts) > 2 else "customer" # Default category
+            self._send_control_command('start_conversation', customer_id, category)
 
         elif cmd == '/stop':
-            self._stop_conversation()
+            self._send_control_command('stop_conversation')
+
+        elif cmd == '/pause':
+            self._send_control_command('pause_conversation')
+
+        elif cmd == '/resume':
+            self._send_control_command('resume_conversation')
 
         elif cmd == '/status':
-            self._check_status()
+            self._check_conversation_node_status()
 
         elif cmd == '/monitor':
             self._show_monitoring_info()
 
         else:
-            print(f"❌ Unknown command: {cmd}")
-            print("Use /help to see available commands")
+            print(f"❌ Unknown command: {cmd}. Use /help to see available commands.")
 
-    def _check_status(self):
-        """Check the status of the conversation node"""
-        print("🔍 Checking conversation node status...")
+    def _send_control_command(self, command_type: str, person_id: str = "none", category: str = "none"):
+        """
+        Sends a control command (start/stop/pause/resume) to the ConversationNode via the
+        /conversation/controller service using an HRICommand message.
+        """
+        if not self.controller_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn(f"ConversationNode's /conversation/controller service not available for command '{command_type}'.")
+            print(f"❌ ConversationNode's /conversation/controller service not available. Is the node running?")
+            return
 
+        request = HRICommand.Request()
+        request.command = command_type
+        request.person_id = person_id
+        request.category = category
+
+        self.get_logger().info(f"Sending control command: '{command_type}' for person '{person_id}' (category: '{category}')")
+        future = self.controller_client.call_async(request)
+
+        # Spin until the future is complete (blocking the input thread briefly)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+
+        if future.result() is not None:
+            response = future.result()
+            if response.success:
+                print(f"✅ Command '{command_type}' sent successfully to ConversationNode.")
+                # Update simulator's internal state based on the command sent
+                if command_type == 'start_conversation':
+                    self.conversation_active = True
+                    self.current_customer_id = person_id
+                    print(f"💬 Conversation started with customer: {person_id}")
+                    print("   Now, type your messages to chat!")
+                elif command_type == 'stop_conversation':
+                    self.conversation_active = False
+                    self.current_customer_id = None
+                    print("💬 Conversation stop command sent. Simulator conversation ended.")
+                    print("Command: ", end="", flush=True) # Return to command prompt
+                elif command_type == 'pause_conversation':
+                    print("⏸️ Conversation pause command sent.")
+                elif command_type == 'resume_conversation':
+                    print("▶️ Conversation resume command sent.")
+            else:
+                print(f"❌ ConversationNode failed to execute command '{command_type}': {response.message}")
+        else:
+            print(f"❌ Service call for '{command_type}' failed: No response received from ConversationNode.")
+
+
+    def _check_conversation_node_status(self):
+        """Calls the /conversation/status service on ConversationNode."""
+        print("🔍 Checking ConversationNode status via /conversation/status service...")
+
+        # Wait for the service to be available
         if not self.status_client.wait_for_service(timeout_sec=2.0):
-            print("❌ Status service not available - conversation node may not be running")
+            print("❌ ConversationNode's /conversation/status service not available. Is the node running?")
             return
 
         try:
             request = Trigger.Request()
             future = self.status_client.call_async(request)
 
-            # Wait for response (blocking in this thread is ok since it's the input thread)
+            # Spin until the future is complete (blocking the input thread briefly)
             rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
 
             if future.result() is not None:
                 response = future.result()
                 if response.success:
-                    print(f"✅ {response.message}")
+                    print(f"✅ ConversationNode Status: {response.message}")
                 else:
-                    print(f"⚠️  Service responded but with failure: {response.message}")
+                    print(f"⚠️  ConversationNode reported an issue: {response.message}")
             else:
-                print("❌ Service call failed - no response received")
+                print("❌ Service call failed: No response received from ConversationNode.")
 
         except Exception as e:
-            print(f"❌ Error calling status service: {e}")
+            self.get_logger().error(f"Error calling /conversation/status service: {e}")
+            print(f"❌ An error occurred while checking status: {e}")
 
     def _show_monitoring_info(self):
-        """Show current monitoring information"""
+        """Displays current monitoring and communication setup information."""
         print("\n" + "=" * 50)
-        print("📡 MONITORING INFO")
+        print("📡 MONITORING & COMMUNICATION SETUP")
         print("=" * 50)
-        print("Topics being monitored:")
-        print("  🎤 Speech Input:     /speech/recognized_text")
-        print("  🗣️  TTS Output:       /speech/tts_input")
-        print("  🚶 Walk Commands:    /navigation/walk_to_area")
-        print("  🎛️  Controller:       /conversation/controller")
-        print("\nServices available:")
-        print("  📊 Status Check:     /conversation/status")
-        print("\nConversation State:")
-        print(f"  Active: {self.conversation_active}")
-        print(f"  Customer ID: {self.current_customer_id or 'None'}")
+        print("Topics this Simulator listens to (Receives from ConversationNode):")
+        print("  • TTS Output:            /speech/tts_input (std_msgs/String)")
+        print("  • Conversation Status:   /conversation/status (tiago/ConversationStatus) - includes walk commands")
+        print("\nTopics this Simulator publishes to (Sends to ConversationNode):")
+        print("  • Speech Input:          /speech/recognized_text (std_msgs/String)")
+        print("\nServices this Simulator calls (on ConversationNode):")
+        print("  • Control Commands:      /conversation/controller (tiago/HRICommand service)")
+        print("  • Node Status Check:     /conversation/status (std_srvs/Trigger service)")
+        print("\nSimulator's Current Internal State:")
+        print(f"  • Conversation Active:   {self.conversation_active}")
+        print(f"  • Current Customer ID:   {self.current_customer_id or 'None'}")
         print("=" * 50)
-
-    def _start_conversation(self, customer_id: str):
-        """Start a conversation with the given customer ID"""
-        if self.conversation_active:
-            print(f"❌ Conversation already active with customer {self.current_customer_id}")
-            print("Use /stop to end current conversation first")
-            return
-
-        try:
-            # Send start command
-            msg = ConversationStatus()
-            msg.command = 'start'
-            msg.customer_id = customer_id
-
-            self.controller_publisher.publish(msg)
-
-            self.conversation_active = True
-            self.current_customer_id = customer_id
-
-            print(f"✅ Starting conversation with customer: {customer_id}")
-            print("💬 You can now chat! Type your messages below.")
-            print("   Use /stop to end the conversation")
-            print("📡 Monitoring walk commands and TTS responses...")
-
-        except Exception as e:
-            self.get_logger().error(f"Failed to start conversation: {e}")
-            print(f"❌ Failed to start conversation: {e}")
-
-    def _stop_conversation(self):
-        """Stop the current conversation"""
-        if not self.conversation_active:
-            print("❌ No active conversation to stop")
-            return
-
-        try:
-            # Send stop command
-            msg = ConversationStatus()
-            msg.command = 'stop'
-            msg.customer_id = self.current_customer_id or ''
-
-            self.controller_publisher.publish(msg)
-
-            print(f"✅ Stopping conversation with customer: {self.current_customer_id}")
-
-            self.conversation_active = False
-            self.current_customer_id = None
-
-        except Exception as e:
-            self.get_logger().error(f"Failed to stop conversation: {e}")
-            print(f"❌ Failed to stop conversation: {e}")
 
     def _send_speech_input(self, text: str):
-        """Send text as simulated speech input"""
+        """Publishes user-typed text as simulated speech input."""
         try:
             msg = String()
             msg.data = text
             self.speech_publisher.publish(msg)
+            # self.get_logger().debug(f"Sent speech input: {text}") # Uncomment for verbose logging
 
         except Exception as e:
             self.get_logger().error(f"Failed to send speech input: {e}")
@@ -265,14 +293,12 @@ def main(args=None):
 
     try:
         simulator = ConversationSimulator()
-
-        # Keep the node spinning
-        rclpy.spin(simulator)
+        rclpy.spin(simulator) # Keep the node spinning to process callbacks
 
     except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
+        print("\n👋 Shutting down Conversation Simulator...")
     except Exception as e:
-        print(f"❌ Error running simulator: {e}", file=sys.stderr)
+        print(f"❌ An unexpected error occurred: {e}", file=sys.stderr)
     finally:
         rclpy.shutdown()
 

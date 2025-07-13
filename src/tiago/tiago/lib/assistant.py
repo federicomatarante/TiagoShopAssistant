@@ -1,261 +1,353 @@
-import json
-import sys
-from typing import List, Dict, Any, Optional
-from ollama import Client  # Assumes `ollama` Python package is installed
+from __future__ import annotations
 
-from tiago.lib.database.database import Database
-from tiago.lib.map.map import Map
+import json
+import re
+import sys
+from pprint import pprint
+from typing import Any, Dict, List, Optional, Sequence, TypedDict, Union
+
+import requests
+
+try:
+    from ollama import Client as OllamaClient
+except ModuleNotFoundError:
+    OllamaClient = None  # type: ignore
+
+# Optional future use; not referenced directly right now
+from tiago.lib.database.database import Database  # noqa: F401
+from tiago.lib.map.map import Map  # noqa: F401
+
+
+class _ChatMessage(TypedDict):
+    role: str
+    content: str
 
 
 class ShopAssistant:
-    def __init__(self, model: str, customer_id: str, window_size=6):
-        self.customer_id = customer_id
-        self.llm = Client()
+    """Conversational assistant for a sports shop.
+
+    You can pick **Ollama** (local) or **Groq** (cloud) as the backend.
+
+    Parameters
+    ----------
+    provider : {"ollama", "groq"}, default "ollama"
+        Which LLM backend to use.
+    model : str
+        Model name recognised by the chosen provider (e.g. ``llama3`` or
+        ``mixtral-8x7b`` for Groq).
+    customer_id : str
+        Unique identifier of the customer.
+    subject_info : str
+        One‑line description of the customer (e.g. "first‑time visitor").
+    window_size : int, default 6
+        How many most‑recent user utterances to consider when building a
+        structured query.
+
+    Environment variables (Groq only)
+    ---------------------------------
+    GROQ_API_KEY : str
+        Your Groq secret key. If missing you can also pass it explicitly via
+        :pymeth:`set_groq_api_key`.
+    """
+
+    # ------------------------------------------------------------------
+    # Construction helpers
+    # ------------------------------------------------------------------
+
+    def __init__(
+            self,
+            model: str,
+            customer_id: str,
+            subject_info: str,
+            provider: str = "ollama",
+            groq_api_key: Optional[str] = None,
+            window_size: int = 6,
+    ) -> None:
+        self.provider = provider.lower()
+        if self.provider not in {"ollama", "groq"}:
+            raise ValueError("provider must be 'ollama' or 'groq'")
+        if self.provider == "groq" and not groq_api_key:
+            raise ValueError(
+                "Groq provider requires a Groq API key. "
+                "Set it via the GROQ_API_KEY environment variable or use set_groq_api_key()."
+            )
         self.model = model
-        self.chat_history: List[Dict[str, str]] = []
+        self.customer_id = customer_id
+        self.subject_info = subject_info
         self.window_size = window_size
-        self.customer_information = {}
+        self.customer_information: Dict[str, Any] = {}
+        self.chat_history: List[_ChatMessage] = []
 
-    def add_message(self, content: str):
-        self.chat_history.append({'role': 'user', 'content': content})
+        # Provider‑specific client initialisation
+        if self.provider == "ollama":
+            if OllamaClient is None:
+                raise ImportError("Ollama library not installed; pip install ollama")
+            self._ollama = OllamaClient()
+        else:  # groq
+            self._groq_api_key: Optional[str] = groq_api_key
+            self._groq_endpoint = "https://api.groq.com/openai/v1/chat/completions"
 
-    def set_customer_information(self, customer_information: Dict[str, Any]):
-        """
-        Set the customer information for the assistant.
+    # ----------------------------- Public helpers -----------------------------
 
-        Args:
-            customer_information (Dict[str, Any]): The structured customer information to set.
-        """
+    def set_groq_api_key(self, key: str) -> None:
+        """Manually set (or override) the Groq API key at runtime."""
+        self._groq_api_key = key
+
+    def add_message(self, content: str) -> None:
+        """Append a *user* message to the conversation."""
+        self._append("user", content)
+
+    def set_customer_information(self, customer_information: Dict[str, Any]) -> None:
+        """Provide structured, previously‑known customer info."""
         self.customer_information = customer_information
 
+    # ------------------------------------------------------------------
+    # Core conversational methods
+    # ------------------------------------------------------------------
+
     def answer(self, option: Optional[str] = None) -> str:
-        system_instruction = {
-            "role": "system",
-            "content": (
-                "You're a sports shop assistant. Be concise and clear. "
-                "You do not do physical actions - like walking - you just provide information.\n"
-                "If the user is asking for information about a product or staff that you don't have, just tell him you "
-                "don't know and try to assist him otherwise."
-                f"This is what you know about the customer from previous conversations with him: "
-                f"{self.customer_information}\n" if self.customer_information else ""
-                                                                                   "Try to not write more than 3 sentences.\n"
-                                                                                   f"{option}\n" if option else ""
+        """Generate an assistant reply (no external result table)."""
+        sys_inst = self._make_base_system_instruction(option)
+        reply = self._chat([sys_inst, *self.chat_history])
+        self._append("assistant", reply)
+        return reply
+
+    def answer_with_results(self, products: Optional = None, staff: Optional = None, areas: Optional = None,
+                            option: Optional[str] = None) -> str:
+        """Generate an assistant reply that references *results*."""
+        results = {}
+
+        if products:
+            results["products"] = products
+        if staff:
+            results["staff"] = staff
+        if areas:
+            for i, product in enumerate(results["products"]):
+                product["location"] = areas[i]
+
+        if products is not None and not products:
+            assistant_action = (
+                "You don't have the specific products in the shop the user is asking for. Tell him that and try to help him in other ways.\n"
             )
-        }
-        response = self.llm.chat(model=self.model, messages=[system_instruction, *self.chat_history])
-        assistant_reply = response['message']['content']
-        self.chat_history.append({'role': 'assistant', 'content': assistant_reply})
-        return assistant_reply
-
-    def answer_with_results(self, results: Dict, option: Optional[str] = None) -> str:
-        """
-        Show the results of the query to the user.
-        :param results: The results of the query to show to the user.
-        Results should be a dictionary with keys 'products' and/or 'staff', each containing a list of relevant items.
-
-        :param option: Optional additional instructions to the assistant.
-        """
-        system_instruction = {
-            "role": "system",
-            "content": (
-                "You are a sports shop assistant. Your task is to extract structured information from user messages.\n"
-                "You do not do physical actions - like walking - you just provide information.\n"
+        elif staff is not None and not staff:
+            assistant_action = (
+                "You don't have the specific staff members in the shop the user is asking for. Tell him that and try to help him in other ways.\n"
+            )
+        else:
+            assistant_action = (
                 "Try to help the user with the following information:\n"
                 f"{json.dumps(results, indent=2)}\n"
                 "If the data is not relevant, do not include it in the answer and try to help the customer in other ways.\n"
-                "Try to not write more than 3 sentences.\n"
-                f"{option}\n" if option else ""
             )
-        }
 
-        # Printing in stderr
-        response = self.llm.chat(model=self.model, messages=[system_instruction, *self.chat_history])
-        assistant_reply = response['message']['content']
-        self.chat_history.append({'role': 'assistant', 'content': assistant_reply})
-        return assistant_reply
+        parts = [
+            "You are a sports shop assistant.",
+            "You do not do physical action – like walking– you just provide information.",
+            f"The person you're talking with is a {self.subject_info}.",
+            "It's really important that you do not make up information, If the user asks for something you don't know, just say you don't know and try to help them in other ways.\n"
+            f"This is what you know about the customer from previous conversations with them: {self.customer_information}",
+            assistant_action,
+            "Try not to write more than 3 short sentences per answer.",
+        ]
+        if option:
+            parts.append(option)
 
-    def extract_knowledge(self) -> Dict[str, any]:
-        """
-        Extract structured knowledge about the customer and conversation history.
+        sys_inst: _ChatMessage = {"role": "system", "content": "\n".join(parts)}
+        print("[ShopAssistant._chat] Sending messages:", file=sys.stderr)  # TODO remove
+        pprint([sys_inst, *self.chat_history], stream=sys.stderr)  # TODO remove
+        reply = self._chat([sys_inst, *self.chat_history])
+        self._append("assistant", reply)
+        return reply
 
-        This method analyzes the chat history to identify:
-        1. Customer personal information (name, preferences, needs)
-        2. Key events in the conversation
-        3. Products or services the customer showed interest in
-        4. Any issues or complaints mentioned
+    # ------------------------------------------------------------------
+    # Knowledge extraction
+    # ------------------------------------------------------------------
 
-        Returns:
-            Dict[str, any]: JSON formatted knowledge extracted from the conversation
-        """
-        system_instruction_content = (
-            "You're analyzing a conversation between a sports shop assistant and a customer. "
-            "Extract structured information from the conversation history only about the customer ( user ) "
-            "information, not about the assistant!."
-            "Create a JSON with the following fields (all are optional):\n"
-            "customer_info: {\n"
-            "  name: Customer's name if mentioned,\n"
-            "  age_category: Customer's age category if mentioned (e.g., child, adult),\n"
-            "  gender: male, female or other,\n"
-            "  preferences: Any product preferences mentioned (brands, styles, sports),\n"
-            "  size_info: Any sizing information mentioned (shoe size, clothing size),\n"
-            "  budget: Any budget constraints mentioned\n"
-            "},\n"
-            "products_of_interest: List of specific products the customer asked about or showed interest in,\n"
-            "purchase_intent: Assessment of how likely the customer is to make a purchase (high/medium/low),\n"
-            "follow_up_needed: Whether the customer needs additional assistance or information,\n"
-            "conversation_summary: Brief summary of the key points of the conversation\n"
-            "}\n"
-            f"This is what you know about the customer from previous conversations with him, so modify it with the new one: "
-            f"{self.customer_information}\n" if self.customer_information else ""
-                                                                               "Extract only information that was explicitly shared. Don't make assumptions about data not provided.\n"
-                                                                               "All the fields should be strings or list of strings, except follow_up_needed, which must be a boolean.\n"
-                                                                               "Answer only with the JSON, no extra text!\n"
-        )
+    def extract_knowledge(self) -> Dict[str, Any]:
+        """Return structured JSON about the *customer* from full history."""
+        parts: List[str] = [
+            "You're analyzing a conversation between a sports‑shop assistant and a user. "
+            "Extract structured information from the *user* messages only.",
+            "Create a JSON with the following optional fields:\n"
+            "customer_info: { name, age_category, gender, preferences, size_info, budget },\n"
+            "products_of_interest, purchase_intent (high|medium|low), follow_up_needed (boolean), conversation_summary",
+            "Extract *only* information that was explicitly shared. All scalar fields must be strings; lists where appropriate. follow_up_needed is boolean.",
+        ]
+        if self.customer_information:
+            parts.append(
+                "Previous structured information about the user (update with new insights): "
+                f"{self.customer_information}"
+            )
+        parts.append("Answer only with ONE ( 1 ) JSON – no extra text.")
 
-        system_instruction = {
-            "role": "system",
-            "content": system_instruction_content
-        }
-
-        # Including the entire chat history for analysis
-        result = self.llm.chat(
-            model=self.model,
-            messages=[system_instruction, {'role': 'user', 'content': json.dumps(self.chat_history, indent=2)}]
-        )
-
+        sys_inst: _ChatMessage = {"role": "system", "content": "\n".join(parts)}
+        result_raw = self._chat([sys_inst, {"role": "user", "content": json.dumps(self.chat_history, indent=2)}])
         try:
-            parsed = json.loads(result['message']['content'])
-            return parsed
-        except json.JSONDecodeError:
-            pass
-
-    def _detect_query(self, system_instruction_content: str) -> Dict[str, any]:
-        """
-        Private helper method to extract structured queries from user intent.
-
-        Args:
-            system_instruction_content (str): The system instruction content for the LLM.
-
-        Returns:
-            Dict[str, any]: The parsed JSON response or an empty dictionary if parsing fails.
-        """
-        system_instruction = {
-            "role": "system",
-            "content": system_instruction_content
-        }
-
-        # Only taking the user messages of chat history of window size
-        user_messages = [message['content']
-                         for message in self.chat_history if message['role'] == 'user'][-self.window_size:]
-
-        result = self.llm.chat(
-            model=self.model,
-            messages=[system_instruction, {'role': 'user', 'content': '\n'.join(user_messages)}]
-        )
-
-        try:
-            parsed = json.loads(result['message']['content'])
-            return parsed
-        except json.JSONDecodeError:
+            return json.loads(result_raw)
+        except json.JSONDecodeError as exc:
+            print(f"[extract_knowledge] JSON decode error: {exc}", file=sys.stderr)
             return {}
 
+    # ------------------------------------------------------------------
+    # Direction & query detection helpers
+    # ------------------------------------------------------------------
+
     def get_conversation_direction(self) -> str:
-        """
-        Detect the direction of the conversation based on user input.
+        """Return 'product_info' | 'staff_info' | 'walk_to_product' | 'walk_to_staff' | 'finished' | '' """
+        sys_content = (
+            "You're a sports shop assistant. Your task is to analyze the conversation and determine what the user is asking for.\n"
+            " Answer with JSON with the following structure:\n"
+            " { 'conversation_direction': 'product_info' | 'staff_info' | 'walk_to_product' | 'walk_to_staff' | 'finished' | '' }.\n"
+            " Where: \n"
+            " - 'product_info' means the user is asking about products information or location in the shop.\n"
+            " - 'staff_info' means the user is asking about staff information or location in the shop.\n"
+            " - 'walk_to_product' means the user wants to be walked to a product ( only if he asks it explicitly ).\n"
+            " - 'walk_to_staff' means the user wants to be walked to a staff member ( only if he asks it explicitly ).\n"
+            " - 'finished' means the conversation is over and no further action is needed ( only if he asks it explicitly ).\n"
+            " - '' means the conversation is not about any of the above.\n"
+            " Just answer with ONE ( 1 ) JSON, no extra text, with the most likely direction.\n"
+        )
+        result = self._detect_query(sys_content)
+        return result.get("conversation_direction", "").strip() if isinstance(result, dict) else ""
 
-        Returns:
-            str: The detected direction of the conversation. Possible values are:
-            - product_info: The customer clearly asked for product information.
-            - staff_info: The customer clearly asked for staff information.
-            - walk_to_product: The customer clearly asked to be walked to a product.
-            - walk_to_staff: The customer clearly asked to be walked to a staff member.
-            - finished: It's clear the conversation is ended.
-            - If nothing is relevant, returns an empty string.
-        """
-        system_instruction_content = (
-            "You're a sports shop assistant. Be concise and clear. "
-            "Answer with a JSON with only one field:\n"
-            "conversation_direction ( str ),\n"
-            "Possible values are:\n"
-            "product_info ( the customer clearly asked for product information),\n"
-            "staff_info ( the customer clearly asked for staff information),\n"
-            "walk_to_product ( the customer clearly asked to be walked to a product. Not if he asks information about a product,he must clearly ask to be walked there!),\n"
-            "walk_to_staff ( the customer clearly asked to be walked to a staff member. Not if he asks information about a staff member, he must clearly ask to be walked there! ),\n"
-            "finished ( it's clear the conversation is ended ),\n"
-            "If nothing is relevant, return an empty JSON object.\n"
-            "Answer only with the JSON, no extra text!\n"
-            "It's really important that you answer only if the user clearly asked for it, do not assume anything.\n"
+    def detect_products_query(self) -> Dict[str, Any]:
+        spec = (
+            "You're a sports shop assistant. Your task is to analyze the conversation and determine what kind of product the user is looking for.\n"
+            " Answer with JSON with the following structure:\n"
+            "{\n"
+            "'product_category': str,  # e.g. 'shoes', 'clothes', 'accessories'\n"
+            "'product_name': str,  # e.g. 'running shoes', 'football jersey'\n"
+            "'product_brand': str,  # e.g. 'Nike', 'Adidas'\n"
+            "'product_sport_category': str,  # e.g. 'running', 'football'\n"
+            "'product_description': str,  # e.g. 'lightweight running shoes for long distances'\n"
+            "'price_range': str,  # e.g. 'low', 'medium', 'high'\n"
+            "'product_location_needed': bool  # whether the user wants to be walked to the product location\n"
+            "}\n."
+            "In this case, all the fields are optional ( in case fill them with 'None' ), and you can return an empty JSON if nothing relevant.\n"
+            "Answer only with ONE ( 1 ) JSON, no extra text.\n"
         )
 
-        conversation_query = self._detect_query(system_instruction_content)
-        try:
-            if conversation_query and "conversation_direction" in conversation_query:
-                direction = conversation_query["conversation_direction"].rstrip(" ").lstrip(" ")
-                return direction
-        except TypeError | ValueError | KeyError | AttributeError:
-            pass
-        return ""
+        res = self._detect_query(spec)
+        return res if any(getattr(res, "values", lambda: [])()) else {}
 
-    def detect_products_query(self) -> Dict[str, any]:
-        """
-        Ask the LLM to extract a structured query for products from user intent.
-
-        Returns:
-            Dict[str, any]: The parsed product query or an empty dictionary if parsing fails.
-        """
-        system_instruction_content = (
-            "You're a sports shop assistant. Be concise and clear. "
-            "If the user messages indicate that he needs some products from the database, create a JSON query with the following fields ( all are optional ):\n"
-            "product_category ( like shoes, balls, etc. ),\n"
-            "product_name ( like Air Max, etc. ),\n"
-            "product_brand ( like Nike, Adidas, etc. ),\n"
-            "product_sport_category ( like football, basketball, etc. ),\n"
-            "product_description ( like red shoes, etc. ),\n"
-            "price_range ( like 50-100, etc. ),\n"
-            "product_location_needed ( true or false),\n"
-            "The fields must represent the user's intent. For example, if the user is looking for a specific product, "
-            "include its name and brand.\n"
-            "Do not include information that the customer did not ask for explicitly.\n"
-            "If nothing is relevant, return an empty JSON object.\n"
-            "All of the fields must be strings or list of strings, except product_location_needed, which must be a boolean.\n"
-            "Answer only with the JSON, no extra text!\n"
+    def detect_staff_query(self) -> Dict[str, Any]:
+        spec = (
+            "You're a sports shop assistant. Your task is to analyze the conversation and determine what kind of staff the user may need or is looking for.\n"
+            " Answer with JSON with the following structure:\n"
+            "{\n"
+            "'staff_name': str,  # e.g. 'John Doe'\n"
+            "'staff_role': str,  # e.g. 'sales assistant', 'manager'\n"
+            "'staff_category': str,  # e.g. 'shoes', 'clothes', 'accessories'\n"
+            "'staff_location_needed': bool  # whether the user wants to be walked to the staff member's location\n"
+            "}\n"
+            "In this case, all the fields are optional ( in case fill them with 'None' ), and you can return an empty JSON if nothing relevant.\n"
+            "Answer only with ONE ( 1 ) JSON, no extra text.\n"
         )
+        res = self._detect_query(spec)
+        return res if any(getattr(res, "values", lambda: [])()) else {}
 
-        products_query = self._detect_query(system_instruction_content)
-        try:
-            has_product_query = any(value for value in products_query.values())
-        except (TypeError, ValueError, AttributeError):
-            has_product_query = False
-        if has_product_query:
-            return products_query
-        return {}
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
-    def detect_staff_query(self) -> Dict[str, any]:
+    def _append(self, role: str, content: str) -> None:
+        self.chat_history.append({"role": role, "content": content})
+
+    def _make_base_system_instruction(self, extra: Optional[str] = None) -> _ChatMessage:
+        parts: List[str] = [
+            "You're a sports shop assistant. Your role is to help customers or staffer in the shop."
+            "Be concise and clear with the answer, like if you were having a normal conversation. "
+            "You do not do physical actions - like walking– you just provide information.",
+            f"The person you're talking with is a {self.subject_info}.\n",
+            "It's really important that you do not make up information, If the user asks for something you don't know, "
+            "just say you don't know and try to help them in other ways.",
+        ]
+        if self.customer_information:
+            parts.append(
+                "This is what you know about the customer from previous conversations with them: "
+                f"{self.customer_information}"
+            )
+        parts.append("Try to not write more than 3 short sentences per answer.")
+        if extra:
+            parts.append(extra)
+        return {"role": "system", "content": "\n".join(parts)}
+
+    # --------------- Backend‑agnostic chat dispatcher ----------------
+
+    def _chat(self, messages: Sequence[_ChatMessage]) -> str:
+
+        if self.provider == "ollama":
+            assert self._ollama is not None
+            response = self._ollama.chat(model=self.model, messages=list(messages))
+            return response["message"]["content"]
+        # Groq branch
+        if not self._groq_api_key:
+            raise RuntimeError(
+                "Groq API key not set. Use set_groq_api_key() or export GROQ_API_KEY before instantiating."
+            )
+        headers = {
+            "Authorization": f"Bearer {self._groq_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"model": self.model, "messages": list(messages)}
+        resp = requests.post(self._groq_endpoint, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+    # ------------------ Narrow‑window LLM helper ------------------
+
+    def _clean_json(self, raw: str) -> str:
+        """Return a string that is much closer to valid JSON.
+        Fixes performed, in order:
+          1. Normalise quotes + newlines.
+          2. Convert the *string* "None" to JSON null.
+          3. Convert bare True/False/None to JSON literals.
+          4. Remove trailing commas before } or ].
+          5. Collapse repeated whitespace.
         """
-        Ask the LLM to extract a structured query for staff information from user intent.
+        _PY_LITERALS: Dict[str, str] = {  # bare → JSON
+            "True": "true",
+            "False": "false",
+            "None": "null",
+        }
 
-        Returns:
-            Dict[str, any]: The parsed staff query or an empty dictionary if parsing fails.
-        """
-        system_instruction_content = (
-            "You're a sports shop assistant. Be concise and clear. "
-            "If the user messages indicate that he needs information about staff members, create a JSON query with the following fields ( all are optional ):\n"
-            "staff_name ( like John Smith, etc. ),\n"
-            "staff_role ( his rank in the store, like manager, sales associate, etc. ),\n"
-            "staff_category ( what his specialties are, like footwear expert, tennis equipment specialist, etc. ),\n"
-            "staff_location_needed ( true or false ),\n"
-            "If nothing is relevant, return an empty JSON object.\n"
-            "The fields must represent the user's intent. For example, if the user is looking for a specific staff member, "
-            "include their name and role.\n"
-            "Do not include information that the customer did not ask for explicitly.\n"
-            "All of the fields must be strings or list of strings, except staff_location_needed, which must be a boolean.\n"
-            "Answer only with the JSON, no extra text!\n"
-        )
+        # ① bare True / False / None *outside* quotes
+        _BARE_PY_PATTERN = re.compile(r'(?<!")\b(?:True|False|None)\b(?!")')
 
-        staff_query = self._detect_query(system_instruction_content)
+        # ② the quoted string "None" (exactly that, nothing else)
+        _QUOTED_NONE_PATTERN = re.compile(r'"\s*None\s*"')
+
+        # ③ trailing comma right before } or ]
+        _TRAILING_COMMA_PATTERN = re.compile(r',\s*([}\]])')
+
+        # ④ runs of ≥2 whitespace chars
+        _MULTI_WS_PATTERN = re.compile(r'\s{2,}')
+        # 1. quick normalisation
+        cleaned = raw.replace("'", '"').replace("\n", " ").strip()
+
+        # 2. "None"  →  null
+        cleaned = _QUOTED_NONE_PATTERN.sub("null", cleaned)
+
+        # 3. True / False / None  →  true / false / null
+        cleaned = _BARE_PY_PATTERN.sub(lambda m: _PY_LITERALS[m.group(0)], cleaned)
+
+        # 4. kill dangling commas
+        cleaned = _TRAILING_COMMA_PATTERN.sub(r'\1', cleaned)
+
+        # 5. compact whitespace
+        cleaned = _MULTI_WS_PATTERN.sub(" ", cleaned)
+
+        return cleaned
+
+    def _detect_query(self, system_instruction_content: str) -> Dict[str, Any]:
+        sys_inst: _ChatMessage = {"role": "system", "content": system_instruction_content}
+        last_user_msgs = [m["content"] for m in self.chat_history if m["role"] == "user"][-self.window_size:]
+        joined = "\n".join(last_user_msgs)
+        raw = self._chat([sys_inst, {"role": "user", "content": joined}])
+        raw = self._clean_json(raw)
         try:
-            has_staff_query = any(value for value in staff_query.values())
-        except (TypeError, ValueError, AttributeError):
-            has_staff_query = False
-        if has_staff_query:
-            return staff_query
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            print(f"[_detect_query] JSON decode error: {exc}.\nRaw response: \"{raw}\"", file=sys.stderr)
+            return {}
