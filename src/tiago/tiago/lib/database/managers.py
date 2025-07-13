@@ -59,7 +59,6 @@ class EmbeddingsManager:
 class ProductRecommender:
     def __init__(self, all_products, embeddings_manager: EmbeddingsManager = None):
         self.embeddings_manager = embeddings_manager or EmbeddingsManager()
-        # TODO debug:
 
         self.product_names_emb = np.stack(
             [product.embedded_name for product in all_products]) if all_products else np.empty((0, 0))

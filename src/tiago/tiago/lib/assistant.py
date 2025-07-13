@@ -153,8 +153,6 @@ class ShopAssistant:
             parts.append(option)
 
         sys_inst: _ChatMessage = {"role": "system", "content": "\n".join(parts)}
-        print("[ShopAssistant._chat] Sending messages:", file=sys.stderr)  # TODO remove
-        pprint([sys_inst, *self.chat_history], stream=sys.stderr)  # TODO remove
         reply = self._chat([sys_inst, *self.chat_history])
         self._append("assistant", reply)
         return reply
