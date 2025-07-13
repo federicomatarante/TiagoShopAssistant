@@ -136,7 +136,20 @@ class PathPlannerService(Node):
             self.get_logger().warn("No valid waypoints for random walk.")
             return self.create_path_message([])
 
-        random_target = random.choice(reachable_waypoints)
+        # Filter out waypoints that are too close to current position
+        min_distance_threshold = 1.0
+        distant_waypoints = []
+        
+        for wp in reachable_waypoints:
+            distance = math.sqrt((wp[0] - current_pos[0])**2 + (wp[1] - current_pos[1])**2)
+            if distance >= min_distance_threshold:
+                distant_waypoints.append(wp)
+        
+        if not distant_waypoints:
+            self.get_logger().warn(f"No waypoints found beyond minimum distance threshold of {min_distance_threshold}.")
+            return self.create_path_message([])
+
+        random_target = random.choice(distant_waypoints)
 
         final_path_points = self._plan_and_smooth_path(current_pos, random_target)
 
@@ -194,7 +207,7 @@ class PathPlannerService(Node):
                     self.get_logger().warn("Could not get current robot position for go_to_location.")
                     response.success = False
                     return response
-                target_pos = [request.location.x, request.location.y]
+                target_pos = [request.location.x, request.location.y, request.location.z]
 
                 final_path_points = self._plan_and_smooth_path(current_pos, target_pos)
 
