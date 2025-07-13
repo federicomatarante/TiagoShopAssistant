@@ -20,25 +20,22 @@ class TiagoState(Enum):
     IDLE = "IDLE"
     CONVERSATION = "CONVERSATION"
     WALKING_TO_AREA = "WALKING_TO_AREA"
-    AUTONOMOUS_SEQUENCE = "AUTONOMOUS_SEQUENCE"  # New state for autonomous behavior
 
 
 class ReasoningNode(Node):
     def __init__(self):
         super().__init__('reasoning_node')
-        self.state = TiagoState.AUTONOMOUS_SEQUENCE  # Start in autonomous mode
+        self.state = TiagoState.IDLE  # Start in IDLE state
         self.current_person_id = None
         self.robot_position = Point()
+        
+        # Add retry logic for failed random walks
+        self.random_walk_retry_timer = None
+        self.random_walk_retry_count = 0
+        self.max_random_walk_retries = 10
+        self.waiting_for_path_completion = False  # Prevent multiple simultaneous path commands
 
-        # Autonomous sequence tracking
-        self.random_walk_count = 0
-        self.max_random_walks = 2
-        self.final_position = Point(x=-4.3, y=-3.0, z=0.0)
-        self.sequence_completed = False
-        self.waiting_for_path_completion = False  # NEW: Track if we're waiting for path completion
-        self.retry_timer = None  # NEW: Track retry timer to avoid overlaps
-
-        self.get_logger().info("Starting TiaGo Reasoning Node with autonomous sequence")
+        self.get_logger().info("Starting TiaGo Reasoning Node in IDLE state")
 
         # TF2 for robot position tracking
         self.tf_buffer = Buffer()
@@ -77,139 +74,88 @@ class ReasoningNode(Node):
             String, 'path_planner_status', self.on_path_status, self.qos_reliable)
 
         self.vision_sub = self.create_subscription(
-            VisionPersonDetection, 'vision_person_detection', self.on_person_detected, self.qos_sensor)
+            VisionPersonDetection, '/person_detection', self.on_person_detected, self.qos_sensor)
 
         self.hri_status_sub = self.create_subscription(
-            ConversationStatus, 'hri_conversation_status', self.on_hri_status, self.qos_reliable)
+            ConversationStatus, '/hri_conversation_status', self.on_hri_status, self.qos_reliable)
 
         # Alternative: Subscribe to odometry if TF is not available
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
-        # Start autonomous sequence
-        self.start_autonomous_sequence()
+        # Start random walk behavior in IDLE state (with delay to let services initialize)
+        self.create_timer(2.0, self.start_idle_behavior)
 
-    def start_autonomous_sequence(self):
-        """Start the autonomous sequence with random walks followed by fixed position."""
-        self.get_logger().info("Starting autonomous sequence: 2 random walks + final position")
-        self.execute_next_random_walk()
+    def start_idle_behavior(self):
+        """Start random walk behavior when in IDLE state."""
+        if self.state == TiagoState.IDLE and not self.waiting_for_path_completion:
+            self.get_logger().info("Starting random walk behavior in IDLE state")
+            self.send_path_command_with_retry("random_walk")
 
-    def execute_next_random_walk(self):
-        """Execute the next random walk in the sequence."""
-        # NEW: Check if we're already waiting for a path completion
+    def send_path_command_with_retry(self, command, location=None):
+        """Send path command with retry logic for random walks."""
+        # Check if we're already waiting for a path completion
         if self.waiting_for_path_completion:
-            self.get_logger().info("Already waiting for path completion, skipping duplicate request")
+            # self.get_logger().info("Already waiting for path completion, skipping duplicate request")
             return
             
-        # NEW: Cancel any existing retry timer
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            self.retry_timer = None
+        # Cancel any existing retry timer
+        if self.random_walk_retry_timer:
+            self.random_walk_retry_timer.cancel()
+            self.random_walk_retry_timer = None
         
-        if self.random_walk_count < self.max_random_walks:
-            self.random_walk_count += 1
-            self.waiting_for_path_completion = True  # NEW: Mark that we're waiting
-            
-            self.get_logger().info(f"Starting random walk {self.random_walk_count}/{self.max_random_walks}")
-            
-            # Send command and wait for completion via path status callback
-            future = self.send_path_command("random_walk")
-            
-            # Handle the response
-            def handle_random_walk_response(future):
-                try:
-                    response = future.result()
-                    if response is not None and response.success:
-                        self.get_logger().info(f"Random walk {self.random_walk_count} command successfully sent")
-                        # Don't set waiting_for_path_completion = False here, 
-                        # wait for path status callback
-                    else:
-                        self.get_logger().error(f"Random walk {self.random_walk_count} command failed")
-                        self.waiting_for_path_completion = False  # NEW: Reset waiting flag
-                        self.handle_random_walk_failure()
-                except Exception as e:
-                    self.get_logger().error(f"Random walk service call failed: {e}")
-                    self.waiting_for_path_completion = False  # NEW: Reset waiting flag
-                    self.handle_random_walk_failure()
-            
-            future.add_done_callback(handle_random_walk_response)
-        else:
-            self.execute_final_position()
-
-    def handle_random_walk_failure(self):
-        """Handle random walk failure with retry after delay."""
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            
-        self.get_logger().info(f"Retrying random walk {self.random_walk_count} in 5 seconds...")
-        self.random_walk_count -= 1  # Decrement to retry the same walk
+        self.waiting_for_path_completion = True  # Mark that we're waiting
         
-        # NEW: Create single-shot timer for retry
-        self.retry_timer = self.create_timer(5.0, self.retry_random_walk_callback)
-
-    def retry_random_walk_callback(self):
-        """Single-shot callback for retry timer."""
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            self.retry_timer = None
+        future = self.send_path_command(command, location)
         
-        self.get_logger().info("Retry timer expired, attempting random walk again")
-        self.execute_next_random_walk()
-
-    def execute_final_position(self):
-        """Navigate to the final fixed position."""
-        # NEW: Check if we're already waiting for a path completion
-        if self.waiting_for_path_completion:
-            self.get_logger().info("Already waiting for path completion, skipping duplicate request")
-            return
-            
-        # NEW: Cancel any existing retry timer
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            self.retry_timer = None
-        
-        self.waiting_for_path_completion = True  # NEW: Mark that we're waiting
-        
-        self.get_logger().info(f"All random walks completed. Going to final position: [{self.final_position.x}, {self.final_position.y}, {self.final_position.z}]")
-        
-        future = self.send_path_command("go_to_location", self.final_position)
-        
-        def handle_final_position_response(future):
+        def handle_response(future):
             try:
                 response = future.result()
                 if response is not None and response.success:
-                    self.get_logger().info("Final position command successfully sent")
-                    # Don't set waiting_for_path_completion = False here,
-                    # wait for path status callback
+                    self.get_logger().info(f"Path command '{command}' sent successfully")
+                    self.random_walk_retry_count = 0  # Reset retry count on success
+                    # Don't reset waiting_for_path_completion here - wait for path status callback
                 else:
-                    self.get_logger().error("Final position command failed")
-                    self.waiting_for_path_completion = False  # NEW: Reset waiting flag
-                    self.handle_final_position_failure()
+                    self.get_logger().error(f"Path command '{command}' failed - response: {response}")
+                    self.waiting_for_path_completion = False  # Reset waiting flag
+                    self.handle_random_walk_failure()
             except Exception as e:
-                self.get_logger().error(f"Final position service call failed: {e}")
-                self.waiting_for_path_completion = False  # NEW: Reset waiting flag
-                self.handle_final_position_failure()
+                self.get_logger().error(f"Path command '{command}' service call failed: {e}")
+                self.waiting_for_path_completion = False  # Reset waiting flag
+                self.handle_random_walk_failure()
         
-        future.add_done_callback(handle_final_position_response)
+        future.add_done_callback(handle_response)
 
-    def handle_final_position_failure(self):
-        """Handle final position failure with retry after delay."""
-        if self.retry_timer:
-            self.retry_timer.cancel()
+    def handle_random_walk_failure(self):
+        """Handle random walk failure with retry logic."""
+        if self.state != TiagoState.IDLE:
+            return
             
-        self.get_logger().info("Retrying final position navigation in 5 seconds...")
+        self.random_walk_retry_count += 1
         
-        # NEW: Create single-shot timer for retry
-        self.retry_timer = self.create_timer(5.0, self.retry_final_position_callback)
+        if self.random_walk_retry_count <= self.max_random_walk_retries:
+            retry_delay = min(5.0 * self.random_walk_retry_count, 30.0)  # Exponential backoff, max 30s
+            self.get_logger().info(f"Retrying random walk in {retry_delay}s (attempt {self.random_walk_retry_count}/{self.max_random_walk_retries})")
+            
+            # Cancel existing timer if any
+            if self.random_walk_retry_timer:
+                self.random_walk_retry_timer.cancel()
+            
+            # Create new retry timer
+            self.random_walk_retry_timer = self.create_timer(retry_delay, self.retry_random_walk)
+        else:
+            self.get_logger().error("Max random walk retries reached. Stopping retry attempts.")
+            self.random_walk_retry_count = 0
 
-    def retry_final_position_callback(self):
-        """Single-shot callback for final position retry timer."""
-        if self.retry_timer:
-            self.retry_timer.cancel()
-            self.retry_timer = None
-        
-        self.get_logger().info("Final position retry timer expired, attempting navigation again")
-        self.execute_final_position()
+    def retry_random_walk(self):
+        """Retry random walk (single-shot timer callback)."""
+        if self.random_walk_retry_timer:
+            self.random_walk_retry_timer.cancel()
+            self.random_walk_retry_timer = None
+            
+        if self.state == TiagoState.IDLE:
+            self.get_logger().info("Retrying random walk...")
+            self.send_path_command_with_retry("random_walk")
 
     def update_robot_position(self):
         """Update robot position using TF2."""
@@ -236,29 +182,36 @@ class ReasoningNode(Node):
     # Callbacks
     def on_path_status(self, msg):
         if msg.data == "finished":
-            self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+            self.waiting_for_path_completion = False  # Reset waiting flag
             
-            if self.state == TiagoState.AUTONOMOUS_SEQUENCE:
-                if self.random_walk_count < self.max_random_walks:
-                    self.get_logger().info(f"Random walk {self.random_walk_count} completed")
-                    # NEW: Add delay before next random walk to avoid rapid succession
-                    self.create_timer(2.0, self.execute_next_random_walk)
-                elif not self.sequence_completed:
-                    self.get_logger().info("Final position reached! Autonomous sequence completed.")
-                    self.sequence_completed = True
-                    self.state = TiagoState.IDLE
-                    self.get_logger().info("Switching to normal operation mode (IDLE)")
+            if self.state == TiagoState.IDLE:
+                # When a random walk finishes in IDLE state, start another one
+                self.get_logger().info("Random walk completed, starting new random walk")
+                # Add small delay before starting next random walk
+                self.create_timer(2.0, self.start_next_random_walk)
             elif self.state == TiagoState.WALKING_TO_AREA:
                 self.get_logger().info("Reached area - resuming conversation")
                 self.send_hri_command("resume_conversation")
                 self.state = TiagoState.CONVERSATION
 
+    def start_next_random_walk(self):
+        """Start the next random walk (single-shot timer callback)."""
+        if self.state == TiagoState.IDLE:
+            self.get_logger().info("Starting next random walk")
+            self.send_path_command_with_retry("random_walk")
+
     def on_person_detected(self, msg):
-        # Only respond to person detection if not in autonomous sequence
-        if self.state == TiagoState.AUTONOMOUS_SEQUENCE:
-            return
-            
+        # Calculate distance for all states
         distance = self.get_distance_class(msg.position)
+        
+        # Calculate actual numerical distance
+        dx = msg.position.x - self.robot_position.x
+        dy = msg.position.y - self.robot_position.y
+        dz = msg.position.z - self.robot_position.z
+        actual_distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        
+        # Print distance and ID for all detected people, regardless of state
+        self.get_logger().info(f"Person detected - ID: {msg.person_id}, Distance: {distance} ({actual_distance:.2f}m), State: {self.state.value}")
 
         if self.state == TiagoState.IDLE and distance == "close":
             self.get_logger().info(f"Starting conversation with person {msg.person_id}")
@@ -290,7 +243,7 @@ class ReasoningNode(Node):
     # Helper methods
     def go_to_idle(self):
         self.send_hri_command("stop_conversation")
-        self.send_path_command("random_walk")
+        self.send_path_command_with_retry("random_walk")
         self.state = TiagoState.IDLE
         self.current_person_id = None
 
