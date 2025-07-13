@@ -33,8 +33,10 @@ class ReasoningNode(Node):
         # Autonomous sequence tracking
         self.random_walk_count = 0
         self.max_random_walks = 2
-        self.final_position = Point(x=-5.0, y=-3.5, z=0.0)
+        self.final_position = Point(x=-4.3, y=-3.0, z=0.0)
         self.sequence_completed = False
+        self.waiting_for_path_completion = False  # NEW: Track if we're waiting for path completion
+        self.retry_timer = None  # NEW: Track retry timer to avoid overlaps
 
         self.get_logger().info("Starting TiaGo Reasoning Node with autonomous sequence")
 
@@ -67,8 +69,8 @@ class ReasoningNode(Node):
         # Wait for services
         while not self.path_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for path planner service...')
-        while not self.hri_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for HRI service...')
+        # while not self.hri_client.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('Waiting for HRI service...')
 
         # Subscribers
         self.path_status_sub = self.create_subscription(
@@ -94,49 +96,120 @@ class ReasoningNode(Node):
 
     def execute_next_random_walk(self):
         """Execute the next random walk in the sequence."""
+        # NEW: Check if we're already waiting for a path completion
+        if self.waiting_for_path_completion:
+            self.get_logger().info("Already waiting for path completion, skipping duplicate request")
+            return
+            
+        # NEW: Cancel any existing retry timer
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            self.retry_timer = None
+        
         if self.random_walk_count < self.max_random_walks:
             self.random_walk_count += 1
+            self.waiting_for_path_completion = True  # NEW: Mark that we're waiting
+            
             self.get_logger().info(f"Starting random walk {self.random_walk_count}/{self.max_random_walks}")
             
-            path_command_successful = False
-            while not path_command_successful:
-                future = self.send_path_command("random_walk")
-                rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-
-                if future.done():
-                    try:
-                        response = future.result()
-                        if response is not None and response.success:
-                            self.get_logger().info(f"Random walk {self.random_walk_count} command successfully sent")
-                            path_command_successful = True
-                        else:
-                            self.get_logger().warn(f"Random walk {self.random_walk_count} command failed. Retrying in 5 seconds...")
-                            time.sleep(5)
-                    except Exception as e:
-                        self.get_logger().error(f"Service call failed: {e}. Retrying random walk...")
-                else:
-                    self.get_logger().warn("Path planner service call timed out. Retrying random walk...")
-                
-                rclpy.spin_once(self, timeout_sec=5)
+            # Send command and wait for completion via path status callback
+            future = self.send_path_command("random_walk")
+            
+            # Handle the response
+            def handle_random_walk_response(future):
+                try:
+                    response = future.result()
+                    if response is not None and response.success:
+                        self.get_logger().info(f"Random walk {self.random_walk_count} command successfully sent")
+                        # Don't set waiting_for_path_completion = False here, 
+                        # wait for path status callback
+                    else:
+                        self.get_logger().error(f"Random walk {self.random_walk_count} command failed")
+                        self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+                        self.handle_random_walk_failure()
+                except Exception as e:
+                    self.get_logger().error(f"Random walk service call failed: {e}")
+                    self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+                    self.handle_random_walk_failure()
+            
+            future.add_done_callback(handle_random_walk_response)
         else:
             self.execute_final_position()
 
+    def handle_random_walk_failure(self):
+        """Handle random walk failure with retry after delay."""
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            
+        self.get_logger().info(f"Retrying random walk {self.random_walk_count} in 5 seconds...")
+        self.random_walk_count -= 1  # Decrement to retry the same walk
+        
+        # NEW: Create single-shot timer for retry
+        self.retry_timer = self.create_timer(5.0, self.retry_random_walk_callback)
+
+    def retry_random_walk_callback(self):
+        """Single-shot callback for retry timer."""
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            self.retry_timer = None
+        
+        self.get_logger().info("Retry timer expired, attempting random walk again")
+        self.execute_next_random_walk()
+
     def execute_final_position(self):
         """Navigate to the final fixed position."""
+        # NEW: Check if we're already waiting for a path completion
+        if self.waiting_for_path_completion:
+            self.get_logger().info("Already waiting for path completion, skipping duplicate request")
+            return
+            
+        # NEW: Cancel any existing retry timer
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            self.retry_timer = None
+        
+        self.waiting_for_path_completion = True  # NEW: Mark that we're waiting
+        
         self.get_logger().info(f"All random walks completed. Going to final position: [{self.final_position.x}, {self.final_position.y}, {self.final_position.z}]")
         
         future = self.send_path_command("go_to_location", self.final_position)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
         
-        if future.done():
+        def handle_final_position_response(future):
             try:
                 response = future.result()
                 if response is not None and response.success:
                     self.get_logger().info("Final position command successfully sent")
+                    # Don't set waiting_for_path_completion = False here,
+                    # wait for path status callback
                 else:
-                    self.get_logger().warn("Final position command failed")
+                    self.get_logger().error("Final position command failed")
+                    self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+                    self.handle_final_position_failure()
             except Exception as e:
                 self.get_logger().error(f"Final position service call failed: {e}")
+                self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+                self.handle_final_position_failure()
+        
+        future.add_done_callback(handle_final_position_response)
+
+    def handle_final_position_failure(self):
+        """Handle final position failure with retry after delay."""
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            
+        self.get_logger().info("Retrying final position navigation in 5 seconds...")
+        
+        # NEW: Create single-shot timer for retry
+        self.retry_timer = self.create_timer(5.0, self.retry_final_position_callback)
+
+    def retry_final_position_callback(self):
+        """Single-shot callback for final position retry timer."""
+        if self.retry_timer:
+            self.retry_timer.cancel()
+            self.retry_timer = None
+        
+        self.get_logger().info("Final position retry timer expired, attempting navigation again")
+        self.execute_final_position()
 
     def update_robot_position(self):
         """Update robot position using TF2."""
@@ -163,12 +236,13 @@ class ReasoningNode(Node):
     # Callbacks
     def on_path_status(self, msg):
         if msg.data == "finished":
+            self.waiting_for_path_completion = False  # NEW: Reset waiting flag
+            
             if self.state == TiagoState.AUTONOMOUS_SEQUENCE:
                 if self.random_walk_count < self.max_random_walks:
                     self.get_logger().info(f"Random walk {self.random_walk_count} completed")
-                    # Wait a bit before starting next random walk
-                    time.sleep(2)
-                    self.execute_next_random_walk()
+                    # NEW: Add delay before next random walk to avoid rapid succession
+                    self.create_timer(2.0, self.execute_next_random_walk)
                 elif not self.sequence_completed:
                     self.get_logger().info("Final position reached! Autonomous sequence completed.")
                     self.sequence_completed = True

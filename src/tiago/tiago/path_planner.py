@@ -38,7 +38,7 @@ class PathPlannerService(Node):
         # It's passed to the A* algorithm to penalize paths close to obstacles.
         # Higher values create safer, more central paths.
         self.declare_parameter('safety_weight', 5.0)
-        self.declare_parameter('smoothing_points',20)
+        self.declare_parameter('smoothing_points',15)
         self.declare_parameter('map_filename', 'my_map.yaml')
 
         # Publishers
