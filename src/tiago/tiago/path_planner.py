@@ -37,7 +37,7 @@ class PathPlannerService(Node):
         # The 'safety_weight' is now the primary control for path safety.
         # It's passed to the A* algorithm to penalize paths close to obstacles.
         # Higher values create safer, more central paths.
-        self.declare_parameter('safety_weight', 7.0)
+        self.declare_parameter('safety_weight', 7.0) # Default safety weight
         self.declare_parameter('smoothing_points',15)
         self.declare_parameter('map_filename', 'my_map.yaml')
 
@@ -90,12 +90,11 @@ class PathPlannerService(Node):
             self.get_logger().warn(f"Could not get robot position: {e}")
             return None
 
-    def _plan_and_smooth_path(self, start_coords, goal_coords):
+    def _plan_and_smooth_path(self, start_coords, goal_coords, safety_weight):
         """
         Helper function to run the A* planner and then smooth the result.
         This centralizes the logic and uses the new safety-aware planner.
         """
-        safety_weight = self.get_parameter('safety_weight').get_parameter_value().double_value
         num_points = self.get_parameter('smoothing_points').get_parameter_value().integer_value
 
         self.get_logger().info(
@@ -151,7 +150,8 @@ class PathPlannerService(Node):
 
         random_target = random.choice(distant_waypoints)
 
-        final_path_points = self._plan_and_smooth_path(current_pos, random_target)
+        # Pass safety_weight for random walk
+        final_path_points = self._plan_and_smooth_path(current_pos, random_target, safety_weight=7.0)
 
         if not final_path_points:
             self.get_logger().warn(f"Could not generate random walk path to {random_target}.")
@@ -209,7 +209,8 @@ class PathPlannerService(Node):
                     return response
                 target_pos = [request.location.x, request.location.y, request.location.z]
 
-                final_path_points = self._plan_and_smooth_path(current_pos, target_pos)
+                # Pass safety_weight for go_to_location
+                final_path_points = self._plan_and_smooth_path(current_pos, target_pos, safety_weight=1.0)
 
                 if final_path_points:
                     ros_path = self.create_path_message(final_path_points)
@@ -254,7 +255,9 @@ class PathPlannerService(Node):
         start_coords = [request.start.pose.position.x, request.start.pose.position.y]
         goal_coords = [request.goal.pose.position.x, request.goal.pose.position.y]
 
-        final_path_points = self._plan_and_smooth_path(start_coords, goal_coords)
+        # Use the default safety_weight for the GetPlan service
+        default_safety_weight = self.get_parameter('safety_weight').get_parameter_value().double_value
+        final_path_points = self._plan_and_smooth_path(start_coords, goal_coords, safety_weight=default_safety_weight)
 
         if final_path_points:
             response.plan = self.create_path_message(final_path_points)

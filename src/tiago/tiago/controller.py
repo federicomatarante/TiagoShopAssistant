@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 import math
 import time
+from geometry_msgs.msg import PoseStamped, Point, Quaternion as RosQuaternion, Twist # MODIFIED LINE
 
 # Message types
 from std_srvs.srv import Trigger
@@ -88,6 +89,8 @@ class SimpleNavigationController(Node):
         
         self.path_planner_publisher = self.create_publisher(
             String, 'path_planner_status', 10)
+        self.cmd_vel_publisher = self.create_publisher(
+            Twist, 'cmd_vel', 10) # ADDED LINE
 
         # --- Service server for path commands ---
         self.srv = self.create_service(Trigger, '/controller/stop_trigger', self.stop_trigger_callback)
@@ -98,20 +101,36 @@ class SimpleNavigationController(Node):
         # --- State machine states ---
         self.state = 'IDLE'  # IDLE, NAVIGATING, RETRY_WAIT, MOVING_TO_NEXT
 
-    def stop_trigger_callback(self, request, response):  # TODO check if it works
+    def stop_trigger_callback(self, request, response):
         """Service callback to stop the navigation."""
-        self.get_logger().info("Stop trigger received, canceling navigation.")
+        self.get_logger().info("Stop trigger received.")
+        
+        # Always publish a zero velocity command to ensure immediate physical stop
+        stop_cmd = Twist()
+        self.cmd_vel_publisher.publish(stop_cmd)
+        self.get_logger().info("Published zero velocity command to cmd_vel for immediate stop.")
+
         if self.is_navigating and self.current_goal_handle:
+            self.get_logger().info("Active navigation detected, canceling goal.")
             self.current_goal_handle.cancel_goal_async()
             self.is_navigating = False
             self.current_goal_handle = None
-            self.state = 'IDLE'
-            self.current_path = []
-            response.success = True
-            response.message = "Navigation stopped successfully."
+            self.get_logger().info("Navigation goal cancellation requested.")
         else:
-            response.success = False
-            response.message = "No ongoing navigation to stop."
+            self.get_logger().info("No active navigation goal to cancel (or goal not yet accepted).")
+
+        # Regardless of active navigation, reset controller state
+        self.state = 'IDLE'
+        self.current_path = []  # Clear the path to prevent continuation
+        self.target_waypoint_index = 0  # Reset waypoint index
+        self.retry_count = 0  # Reset retry count
+        self.get_logger().info("Controller state reset to IDLE.")
+
+        response.success = True
+        response.message = "Navigation stop command processed."
+        
+        # Always publish a "stopped" status
+        self.path_planner_publisher.publish(String(data="stopped"))
         return response
 
     def _check_nav_server_ready(self, timeout_sec=5.0):
@@ -125,15 +144,20 @@ class SimpleNavigationController(Node):
         return True
 
     def path_callback(self, msg: Path):
-        """Receives a new path and starts navigation to the first waypoint."""
+        """Receives a new path and prepares to start navigation to the first waypoint."""
         self.get_logger().info(f"New path with {len(msg.poses)} waypoints received.")
 
-        # Cancel any ongoing navigation
+        # Always cancel any ongoing navigation first if a new path arrives
         if self.is_navigating and self.current_goal_handle:
-            self.get_logger().info("Canceling current navigation goal.")
+            self.get_logger().info("Canceling current navigation goal due to new path.")
             self.current_goal_handle.cancel_goal_async()
+            # It's crucial to immediately publish a stop command here too,
+            # in case the robot is already moving from a previous goal
+            stop_cmd = Twist()
+            self.cmd_vel_publisher.publish(stop_cmd)
+            self.get_logger().info("Published zero velocity command to cmd_vel (new path received).")
 
-        # Reset state
+        # Reset state for the new path
         self.is_navigating = False
         self.current_goal_handle = None
         self.retry_count = 0
@@ -141,7 +165,9 @@ class SimpleNavigationController(Node):
         if msg.poses:
             self.current_path = msg.poses
             self.target_waypoint_index = 0
+            # FIX: Set state to MOVING_TO_NEXT to trigger navigation
             self.state = 'MOVING_TO_NEXT'
+            self.get_logger().info("Path received, controller ready to start navigation.")
         else:
             self.current_path = []
             self.state = 'IDLE'

@@ -38,6 +38,11 @@ class ReasoningNode(Node):
         self.max_random_walk_retries = 10
         self.waiting_for_path_completion = False  # Prevent multiple simultaneous path commands
 
+        # Add listening behavior parameters
+        self.listening_duration = 10.0  # seconds to listen before starting random walk
+        self.listening_timer = None
+        self.is_listening = False
+
         self.get_logger().info("Starting TiaGo Reasoning Node in IDLE state")
 
         # TF2 for robot position tracking
@@ -96,22 +101,47 @@ class ReasoningNode(Node):
             VisionObjectDetection, '/object_detection', self.on_object_detected, self.qos_sensor)
 
         self.hri_status_sub = self.create_subscription(
-            ConversationStatus, '/hri_conversation_status', self.on_hri_status, self.qos_reliable)
+            ConversationStatus, '/conversation/status', self.on_hri_status, self.qos_reliable)
 
         # Alternative: Subscribe to odometry if TF is not available
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
-        # Start random walk behavior in IDLE state (with delay to let services initialize)
+        # Start listening behavior in IDLE state (with delay to let services initialize)
         time.sleep(30)
-        # self.create_timer(45.0, self.start_idle_behavior)
         self.start_idle_behavior()
 
     def start_idle_behavior(self):
-        """Start random walk behavior when in IDLE state."""
-        self.get_logger().warn("tumadreputtn")
+        """Start listening behavior when in IDLE state."""
         if self.state == TiagoState.IDLE and not self.waiting_for_path_completion:
-            self.get_logger().info("Starting random walk behavior in IDLE state")
+            self.get_logger().info("Starting listening behavior in IDLE state")
+            self.start_listening()
+
+    def start_listening(self):
+        """Start listening to surroundings for a specified duration."""
+        if self.state != TiagoState.IDLE:
+            return
+            
+        self.is_listening = True
+        self.get_logger().info(f"Robot is now listening to surroundings for {self.listening_duration} seconds...")
+        
+        # Cancel any existing listening timer
+        if self.listening_timer:
+            self.listening_timer.cancel()
+            
+        # Set timer to end listening period
+        self.listening_timer = self.create_timer(self.listening_duration, self.end_listening)
+
+    def end_listening(self):
+        """End listening period and start random walk if no person was detected."""
+        if self.listening_timer:
+            self.listening_timer.cancel()
+            self.listening_timer = None
+            
+        self.is_listening = False
+        
+        if self.state == TiagoState.IDLE:
+            self.get_logger().info("Listening period ended, no person detected at medium distance. Starting random walk.")
             self.send_path_command_with_retry("random_walk")
 
     def send_path_command_with_retry(self, command, location=None):
@@ -212,20 +242,20 @@ class ReasoningNode(Node):
             self.waiting_for_path_completion = False  # Reset waiting flag
 
             if self.state == TiagoState.IDLE:
-                # When a random walk finishes in IDLE state, start another one
-                self.get_logger().info("Random walk completed, starting new random walk")
-                # Add small delay before starting next random walk
-                self.create_timer(2.0, self.start_next_random_walk)
+                # When a random walk finishes in IDLE state, start listening again
+                self.get_logger().info("Random walk completed, starting listening behavior")
+                # Add small delay before starting listening
+                self.create_timer(2.0, self.start_next_idle_cycle)
             elif self.state == TiagoState.WALKING_TO_AREA:
                 self.get_logger().info("Reached area - resuming conversation")
                 self.send_hri_command("resume_conversation")
                 self.state = TiagoState.CONVERSATION
 
-    def start_next_random_walk(self):
-        """Start the next random walk (single-shot timer callback)."""
+    def start_next_idle_cycle(self):
+        """Start the next idle cycle with listening (single-shot timer callback)."""
         if self.state == TiagoState.IDLE:
-            self.get_logger().info("Starting next random walk")
-            self.send_path_command_with_retry("random_walk")
+            self.get_logger().info("Starting next idle cycle with listening")
+            self.start_listening()
 
     def on_person_detected(self, msg):
         # Calculate distance for all states
@@ -241,35 +271,73 @@ class ReasoningNode(Node):
 
         # Print distance and ID for all detected people, regardless of state
         self.get_logger().info(
-            f"Person detected - ID: {msg.person_id}, Distance: {distance} ({actual_distance:.2f}m), State: {self.state.value}")
+            f"Person detected - ID: {msg.person_id}, Distance: {distance} ({actual_distance:.2f}m), State: {self.state.value}, X:{msg.position.x}, Y:{msg.position.y}")
 
-        if self.state == TiagoState.IDLE and distance == "close":
+            
+        if self.state == TiagoState.IDLE and distance == "medium":
+            # Cancel listening if active
+            if self.is_listening:
+                self.cancel_listening()
+                
+            self.get_logger().info(f"Person {msg.person_id} detected at medium distance during {'listening' if self.is_listening else 'idle'}, approaching")
+            
+            # 1. Immediately stop any current random walk retries
+            if self.random_walk_retry_timer:
+                self.random_walk_retry_timer.cancel()
+                self.random_walk_retry_timer = None
+                self.get_logger().info("Canceled random walk retry timer.")
+            
+            # 2. Reset the waiting_for_path_completion flag
+            self.waiting_for_path_completion = False 
+            self.get_logger().info("Reset waiting_for_path_completion flag.")
+
+            # 3. Send stop movement command
+            stop_result = self.send_path_command("stop_movement", sync=False)
+            # if not stop_result.success:
+            #     self.get_logger().error("Failed to stop movement, cannot proceed with approaching.")
+            #     return
+
+            # self.get_logger().info("Stop movement command successful.")
+
+            # 4. Calculate approaching point
+            location = self._get_approaching_point(msg.position)
+            if location is None:
+                self.get_logger().error("Failed to calculate approaching point, cannot proceed.")
+                return
+            
+            # 5. Send go_to_location command
+            go_to_result = self.send_path_command("go_to_location", location, sync=True)
+            if go_to_result.success:
+                self.get_logger().info(f"Approaching person {msg.person_id} at {location}")
+                self.state = TiagoState.WALKING_TO_AREA
+            else:
+                self.get_logger().error("Failed to send go_to_location command.")
+                self.go_to_idle()
+
+
+        elif self.state == TiagoState.IDLE and distance == "close":
+            # Cancel listening if active
+            if self.is_listening:
+                self.cancel_listening()
+                
             self.get_logger().info(f"Starting conversation with person {msg.person_id}")
-            self.send_path_command("stop_movement",sync=True)
+            self.send_path_command("stop_movement",sync=False)
             self.send_hri_command("start_conversation", msg.person_id, msg.cls)
             self.state = TiagoState.CONVERSATION
             self.current_person_id = msg.person_id
-        # elif self.state == TiagoState.IDLE and distance == "medium":
-        #     self.get_logger().info(f"Person {msg.person_id} is too far for conversation, approaching")
-        #     result = self.send_path_command("stop_movement",sync=True)
-        #     if not result.result().success:
-        #         self.get_logger().error("Failed to stop movement, cannot proceed")
-        #         return
-        #     self.get_logger().error("Stop command works! Going on [REMOVE]")
-        #     location = self._get_approaching_point(msg.position)
-        #     if location is None:
-        #         self.get_logger().error("Failed to calculate approaching point, cannot proceed")
-        #         return
-        #     result = self.send_path_command("go_to_location", location, sync=True)
-        #     if result.result().success:
-        #         self.get_logger().info(f"Approaching person {msg.person_id} at {location}")
-        #         self.state = TiagoState.WALKING_TO_AREA
-        #     self.get_logger().error("Aooriacgubg command works! Going on [REMOVE]")
 
         elif self.state == TiagoState.CONVERSATION and distance == "far":
             if msg.person_id == self.current_person_id:
                 self.get_logger().info("Person moved away - ending conversation")
                 self.go_to_idle()
+
+    def cancel_listening(self):
+        """Cancel the listening behavior."""
+        if self.listening_timer:
+            self.listening_timer.cancel()
+            self.listening_timer = None
+        self.is_listening = False
+        self.get_logger().info("Listening behavior canceled")
 
     def on_object_detected(self, msg):
         if self.state == TiagoState.CONVERSATION:
@@ -299,8 +367,11 @@ class ReasoningNode(Node):
             self.get_logger().error(f"Failed to update position for object {msg.object}.")
 
     def on_hri_status(self, msg):
+        self.get_logger().info(f"Current state: {self.state}") 
         if self.state != TiagoState.CONVERSATION:
             return
+
+        self.get_logger().info(f"Conversation status: {msg.status}, Person ID: {msg.person_id}")
 
         if msg.status == "finished":
             self.get_logger().info("Conversation finished")
@@ -315,10 +386,15 @@ class ReasoningNode(Node):
 
     # Helper methods
     def go_to_idle(self):
+        # Cancel any listening behavior
+        self.cancel_listening()
+        
         self.send_hri_command("stop_conversation")
-        self.send_path_command_with_retry("random_walk")
         self.state = TiagoState.IDLE
         self.current_person_id = None
+        
+        # Start listening behavior instead of immediately starting random walk
+        self.start_listening()
 
     def get_distance_class(self, position):
         # Now uses updated robot position
@@ -327,9 +403,9 @@ class ReasoningNode(Node):
         dz = position.z - self.robot_position.z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        if distance < 5.0:
+        if distance < 2.5:
             return "close"
-        elif distance < 10.0:
+        elif distance < 3.0:
             return "medium"
         else:
             return "far"
