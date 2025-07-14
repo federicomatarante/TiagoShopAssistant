@@ -83,9 +83,11 @@ class ReasoningNode(Node):
         while not self.area_position_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for area position service...')
 
+        self.get_logger().info("ALL SERVICES TU MADRE")
+
         # Subscribers
         self.path_status_sub = self.create_subscription(
-            String, 'path_planner_status', self.on_path_status, self.qos_reliable)
+            String, '/path_planner_status', self.on_path_status, self.qos_reliable)
 
         self.vision_person_sub = self.create_subscription(
             VisionPersonDetection, '/person_detection', self.on_person_detected, self.qos_sensor)
@@ -101,10 +103,13 @@ class ReasoningNode(Node):
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
         # Start random walk behavior in IDLE state (with delay to let services initialize)
-        self.create_timer(2.0, self.start_idle_behavior)
+        time.sleep(30)
+        # self.create_timer(45.0, self.start_idle_behavior)
+        self.start_idle_behavior()
 
     def start_idle_behavior(self):
         """Start random walk behavior when in IDLE state."""
+        self.get_logger().warn("tumadreputtn")
         if self.state == TiagoState.IDLE and not self.waiting_for_path_completion:
             self.get_logger().info("Starting random walk behavior in IDLE state")
             self.send_path_command_with_retry("random_walk")
@@ -240,10 +245,26 @@ class ReasoningNode(Node):
 
         if self.state == TiagoState.IDLE and distance == "close":
             self.get_logger().info(f"Starting conversation with person {msg.person_id}")
-            self.send_path_command("stop_movement")
+            self.send_path_command("stop_movement",sync=True)
             self.send_hri_command("start_conversation", msg.person_id, msg.cls)
             self.state = TiagoState.CONVERSATION
             self.current_person_id = msg.person_id
+        # elif self.state == TiagoState.IDLE and distance == "medium":
+        #     self.get_logger().info(f"Person {msg.person_id} is too far for conversation, approaching")
+        #     result = self.send_path_command("stop_movement",sync=True)
+        #     if not result.result().success:
+        #         self.get_logger().error("Failed to stop movement, cannot proceed")
+        #         return
+        #     self.get_logger().error("Stop command works! Going on [REMOVE]")
+        #     location = self._get_approaching_point(msg.position)
+        #     if location is None:
+        #         self.get_logger().error("Failed to calculate approaching point, cannot proceed")
+        #         return
+        #     result = self.send_path_command("go_to_location", location, sync=True)
+        #     if result.result().success:
+        #         self.get_logger().info(f"Approaching person {msg.person_id} at {location}")
+        #         self.state = TiagoState.WALKING_TO_AREA
+        #     self.get_logger().error("Aooriacgubg command works! Going on [REMOVE]")
 
         elif self.state == TiagoState.CONVERSATION and distance == "far":
             if msg.person_id == self.current_person_id:
@@ -266,7 +287,7 @@ class ReasoningNode(Node):
             f"Object detected - ID: {msg.object}, Position: ({msg.position.x}, {msg.position.y}, {msg.position.z}). "
             f"Updating position in database.")
         request = UpdateProductPosition.Request()
-        request.object_id = msg.object
+        request.product_id = msg.object
         request.position = msg.position
         future = self.update_product_position_client.call_async(request)
         rclpy.spin_until_future_complete(self, future)
@@ -306,9 +327,9 @@ class ReasoningNode(Node):
         dz = position.z - self.robot_position.z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        if distance < 1.5:
+        if distance < 5.0:
             return "close"
-        elif distance < 3.0:
+        elif distance < 10.0:
             return "medium"
         else:
             return "far"
@@ -328,12 +349,37 @@ class ReasoningNode(Node):
             self.get_logger().error(f"Failed to get position for area '{area}'")
             return Point()
 
+    def _get_approaching_point(self, position):
+        """Calculate the point in front of the person to approach. 1 mt in front of the person."""
+        dx = position.x - self.robot_position.x
+        dy = position.y - self.robot_position.y
+        dz = position.z - self.robot_position.z
+
+        # Normalize the direction vector
+        norm = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if norm == 0:
+            return None
+        dx /= norm
+        dy /= norm
+        dz /= norm
+        # Move 1 meter in front of the person
+        approach_distance = 1.0
+        new_x = position.x + dx * approach_distance
+        new_y = position.y + dy * approach_distance
+        new_z = position.z + dz * approach_distance
+        return Point(x=new_x, y=new_y, z=new_z)
+
     # Service calls (simple async)
-    def send_path_command(self, command, location=None):
+    def send_path_command(self, command, location=None, sync=False):
         request = PathPlannerCommand.Request()
         request.command = command
         request.location = location or Point()
-        future = self.path_client.call_async(request)
+        if sync:
+            future = self.path_client.call(request)
+            rclpy.spin_until_future_complete(self, future)
+            return future.result()
+        else:
+            future = self.path_client.call_async(request)
         return future
 
     def send_hri_command(self, command, person_id="", category=""):

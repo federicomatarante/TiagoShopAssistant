@@ -239,7 +239,7 @@ class PathPlannerService(Node):
 
         else:
             response.success = False
-
+            
         return response
 
     def publish_status(self, status):
