@@ -45,7 +45,7 @@ class VisionController(Node):
         # AprilTag-based object tracking
         self.apriltag_to_object = {}  # apriltag_id -> unique_object_id
         self.unique_objects = {}  # unique_object_id -> object_data
-        
+
         # Subscribe to TIAGo's camera
         self.image_subscription = self.create_subscription(
             Image,
