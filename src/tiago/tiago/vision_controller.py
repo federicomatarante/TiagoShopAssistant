@@ -99,7 +99,7 @@ class VisionController(Node):
             4: {'type': 'customer', 'name': 'customer_emanuele', 'gazebo_model': 'customer_emanuele'},
             5: {'type': 'customer', 'name': 'customer_niccolo', 'gazebo_model': 'customer_niccolo'},
             6: {'type': 'customer', 'name': 'customer_antonello', 'gazebo_model': 'customer_antonello'},
-            # Object tags (sport equipment on red boxes) - 8 total objects, 2 different per sport
+            # Object tags (sport equipment on red boxes)
             8: {'type': 'object', 'class': 'baseball', 'object': 'baseball bat', 'gazebo_model': 'red_box_baseball_bat'},
             9: {'type': 'object', 'class': 'baseball', 'object': 'baseball', 'gazebo_model': 'red_box_baseball'},
             10: {'type': 'object', 'class': 'soccer', 'object': 'soccer ball', 'gazebo_model': 'red_box_soccer_ball'},
@@ -601,7 +601,8 @@ class VisionController(Node):
                     )
                     
                     # Only track and publish persons with AprilTags (for unique identity)
-                    if match['tag'] and 'tag_id' in result:
+                    # Filter out object tags (IDs 8-15) - they should be handled in object detection
+                    if match['tag'] and 'tag_id' in result and result['tag_id'] < 8:
                         apriltag_id = result['tag_id']
                         unique_id, is_new = self.get_or_create_unique_person(apriltag_id, result)
                         

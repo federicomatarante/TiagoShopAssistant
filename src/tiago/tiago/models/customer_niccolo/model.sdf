@@ -26,7 +26,7 @@
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://person_standing/meshes/standing.dae</uri>
+            <uri>meshes/standing.dae</uri>
           </mesh>
         </geometry>
       </collision>
@@ -34,7 +34,7 @@
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://person_standing/meshes/standing.dae</uri>
+            <uri>meshes/standing.dae</uri>
           </mesh>
         </geometry>
       </visual>
@@ -64,7 +64,7 @@
         <material>
           <script>
             <uri>model://customer_niccolo/materials/scripts</uri>
-            <name>CustomerTag</name>
+            <name>CustomerNiccoloTag</name>
           </script>
         </material>
       </visual>

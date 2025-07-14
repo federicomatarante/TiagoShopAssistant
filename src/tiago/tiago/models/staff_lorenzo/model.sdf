@@ -26,7 +26,7 @@
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://person_standing/meshes/standing.dae</uri>
+            <uri>meshes/standing.dae</uri>
           </mesh>
         </geometry>
       </collision>
@@ -34,13 +34,13 @@
         <pose>0 0 0.02 0.04 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://person_standing/meshes/standing.dae</uri>
+            <uri>meshes/standing.dae</uri>
           </mesh>
         </geometry>
       </visual>
     </link>
-    <!-- CUSTOMER APRILTAG BADGE -->
-    <link name="customer_badge">
+    <!-- STAFF APRILTAG BADGE -->
+    <link name="staff_badge">
       <pose>0 -0.21 1.2 0 0 3.14159</pose>
       <visual name="badge_base">
         <geometry>
@@ -64,14 +64,14 @@
         <material>
           <script>
             <uri>model://staff_lorenzo/materials/scripts</uri>
-            <name>CustomerTag</name>
+            <name>StaffLorenzoTag</name>
           </script>
         </material>
       </visual>
     </link>
     <joint name="badge_joint" type="fixed">
       <parent>link</parent>
-      <child>customer_badge</child>
+      <child>staff_badge</child>
     </joint>
   </model>
 </sdf>
