@@ -384,9 +384,14 @@ class ReasoningNode(Node):
             self.go_to_idle()
 
         elif msg.status == "walk_to_area":
-            self.get_logger().info(f"Walking to area: {msg.area}")
-            self.send_hri_command("pause_conversation")
             location = self.get_area_location(msg.area)
+            if location is None:
+                self.get_logger().error(f"Failed to get location for area '{msg.area}'")
+                self.send_hri_command("unknown_location")
+                return
+            self.send_hri_command("walking_to_area")
+            self.send_hri_command("pause_conversation")
+            self.get_logger().info(f"Walking to area: {msg.area}")
             self.send_path_command("go_to_location", location)
             self.state = TiagoState.WALKING_TO_AREA
 
@@ -429,7 +434,7 @@ class ReasoningNode(Node):
             return Point(x=new_x, y=new_y)
         else:
             self.get_logger().error(f"Failed to get position for area '{area}'")
-            return Point()
+            return None
 
     def _get_approaching_point(self, position):
         """Calculate the point in front of the person to approach. 1 mt in front of the person."""

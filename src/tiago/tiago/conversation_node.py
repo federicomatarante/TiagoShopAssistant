@@ -25,6 +25,7 @@ class ConversationNode(Node):
         self.conversation_active = False
         self.current_user_input: Optional[str] = None  # Store the input while async call is pending
         self.conversation_paused = False  # New state for pausing
+        self.waiting_for_walk_confirmation = False  # New state for waiting for robot to start walking
 
         # Database service client
         self.db_client = DatabaseServiceClient(self)
@@ -99,6 +100,24 @@ class ConversationNode(Node):
             if self.conversation_active and self.current_assistant:
                 self._publish_assistant_reply("Welcome back! How can I help you further?")
             response.success = True
+        elif command == "walking_to_area":
+            # This command is received when the robot actually starts walking towards area
+            if self.waiting_for_walk_confirmation and self.current_assistant:
+                self.get_logger().info("Received 'walking_to_area' confirmation. Responding to customer.")
+                self.waiting_for_walk_confirmation = False
+                assistant_reply = self.current_assistant.answer(
+                    option="Say the customer you're going to walk him to the asked location")
+                self._publish_assistant_reply(assistant_reply)
+                response.success = True
+            else:
+                self.get_logger().warn("Received 'walking_to_staff' but not in waiting state or no active assistant.")
+                response.success = False
+        elif command == "unknown_location":
+            assistant_reply = self.current_assistant.answer(
+                option="Say the customer you don't know where the product is located and you cannot walk him to it.")
+            self._publish_assistant_reply(assistant_reply)
+            self.get_logger().warn("Received 'unknown_location' command. Need to handle this case.")
+            response.success = True
         else:
             self.get_logger().warn(f"Unknown command received: {command}")
             response.success = False
@@ -115,6 +134,13 @@ class ConversationNode(Node):
 
         user_input = msg.data.strip()
         if not user_input:
+            return
+
+        # Do not process new input if waiting for walk confirmation
+        if self.waiting_for_walk_confirmation:
+            self.get_logger().info(
+                "Received speech input but currently waiting for walk confirmation. Ignoring for now.")
+            # Optionally, you could queue this input or tell the user to wait.
             return
 
         try:
@@ -188,27 +214,29 @@ class ConversationNode(Node):
         self.status_publisher.publish(status_msg)
         self.get_logger().info(f"Published conversation status: {status}, area: {area if area else 'None'}")
 
-    # --- Callbacks for DatabaseServiceClient responses ---
-
     def _handle_product_walk_response(self, products: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'walk_to_product' query."""
         if len(products) > 0:
             product = products[0]
             self.get_logger().info(f"Found product for walk: {product.name}")
 
-            assistant_reply = self.current_assistant.answer(option="Say the customer you're going to walk him to the product")
-
             # Publish walk area command via status_publisher
             if areas and len(areas) > 0:
                 self._publish_conversation_status("walk_to_area", areas[0])
+                self.waiting_for_walk_confirmation = True  # Set flag to wait for confirmation
+                self.get_logger().info("Published walk command, now waiting for confirmation from robot.")
+                # No immediate assistant reply here; it will be handled by controller_service_callback
             else:
                 self.get_logger().warn("No area found for product walk, cannot publish walk command.")
-
+                assistant_reply = self.current_assistant.answer(
+                    option="Say the customer you couldn't find the product so you cannot walk him to it"
+                )
+                self._publish_assistant_reply(assistant_reply)
         else:
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you couldn't find the product so you cannot walk him to it"
             )
-        self._publish_assistant_reply(assistant_reply)
+            self._publish_assistant_reply(assistant_reply)
 
     def _handle_staff_walk_response(self, staff: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'walk_to_staff' query."""
@@ -216,25 +244,29 @@ class ConversationNode(Node):
             staff_member = staff[0]
             self.get_logger().info(f"Found staff member for walk: {staff_member.name}")
 
-            assistant_reply = self.current_assistant.answer(option="Say the customer you're going to walk him to the staff member")
-
             # Publish walk area command via status_publisher
             if areas and len(areas) > 0:
                 self._publish_conversation_status("walk_to_area", areas[0])
+                self.waiting_for_walk_confirmation = True  # Set flag to wait for confirmation
+                self.get_logger().info("Published walk command, now waiting for confirmation from robot.")
+                # No immediate assistant reply here; it will be handled by controller_service_callback
             else:
                 self.get_logger().warn("No area found for staff walk, cannot publish walk command.")
+                assistant_reply = self.current_assistant.answer(
+                    option="Say the customer you couldn't find the staff member so you cannot walk him to it"
+                )
+                self._publish_assistant_reply(assistant_reply)
         else:
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you couldn't find the staff member so you cannot walk him to it"
             )
-        self._publish_assistant_reply(assistant_reply)
+            self._publish_assistant_reply(assistant_reply)
 
     def _handle_product_info_response(self, products: List, areas: Optional[List[str]], original_user_input: str):
         """Handles response for 'product_info' query."""
         self.get_logger().info(f"Received {len(products)} products for product info query.")
         self.get_logger().debug(f"Found product(s) for info: {[p.name for p in products]}")
         product_results = [product.to_json() for product in products] if products else []
-
 
         assistant_reply = self.current_assistant.answer_with_results(
             products=product_results,
@@ -275,6 +307,7 @@ class ConversationNode(Node):
             self.current_customer_id = customer_id
             self.conversation_active = True
             self.conversation_paused = False  # Ensure conversation is not paused on start
+            self.waiting_for_walk_confirmation = False  # Reset on new conversation
 
             self.get_logger().info(
                 f"Attempting to start conversation with customer {customer_id} (subject info: {category})")
@@ -324,6 +357,7 @@ class ConversationNode(Node):
         self.conversation_active = False
         self.conversation_paused = False
         self.current_user_input = None
+        self.waiting_for_walk_confirmation = False
 
     def _on_customer_knowledge_saved(self, success: bool):
         """Callback for when customer knowledge update completes."""
@@ -335,7 +369,9 @@ class ConversationNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    GROQ_API_KEY = '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'
+    # It's generally better to load API keys from environment variables or a configuration file,
+    # rather than hardcoding them directly in the script for production systems.
+    GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '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')
     try:
         node = ConversationNode(model_name="llama-3.1-8b-instant", groq_api_key=GROQ_API_KEY)
         rclpy.spin(node)
