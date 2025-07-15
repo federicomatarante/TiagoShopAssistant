@@ -109,8 +109,7 @@ class ReasoningNode(Node):
 
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
-        
-        time.sleep(25)
+
         # Start initial idle behavior
         self.start_idle_behavior()
 
@@ -522,3 +521,28 @@ class ReasoningNode(Node):
         request.location = location or Point()
         self.get_logger().info(f"Sending path command: '{command}' with location {location}")
         return self.path_client.call_async(request)
+
+    def _send_hri_command_async(self, command, person_id="", category=""):
+        request = HRICommand.Request()
+        request.command = command
+        request.person_id = person_id
+        request.category = category
+        self.get_logger().info(f"Sending HRI command: '{command}' (Person ID: {person_id}, Category: {category})")
+        return self.hri_client.call_async(request)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ReasoningNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info('Node stopped by KeyboardInterrupt')
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
