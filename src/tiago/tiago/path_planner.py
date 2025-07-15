@@ -42,8 +42,8 @@ class PathPlannerService(Node):
         self.declare_parameter('map_filename', 'my_map.yaml')
 
         # Publishers
-        self.path_publisher = self.create_publisher(Path, 'planned_path', 10)
-        self.status_publisher = self.create_publisher(String, 'path_planner_status', 10)
+        self.path_publisher = self.create_publisher(Path, '/planned_path', 10)
+        self.status_publisher = self.create_publisher(String, '/path_planner_status', 10)
 
         # Service clients
         self.controller_stop_client = self.create_client(Trigger, '/controller/stop_trigger')

@@ -88,7 +88,7 @@ class SimpleNavigationController(Node):
         # Publishers
         
         self.path_planner_publisher = self.create_publisher(
-            String, 'path_planner_status', 10)
+            String, '/path_planner_status', 10)
         self.cmd_vel_publisher = self.create_publisher(
             Twist, 'cmd_vel', 10) # ADDED LINE
 

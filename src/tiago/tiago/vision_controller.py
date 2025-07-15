@@ -572,7 +572,7 @@ class VisionController(Node):
             
             # Less frequent logging
             self.log_counter += 1
-            should_log = (self.log_counter % 10 == 0)
+            should_log = (self.log_counter % 1 == 0)
             
             # Step 1: Detect persons
             person_rects = self.detect_persons(cv_image)

@@ -39,7 +39,7 @@ class ReasoningNode(Node):
         self.waiting_for_path_completion = False  # Prevent multiple simultaneous path commands
 
         # Add listening behavior parameters
-        self.listening_duration = 10.0  # seconds to listen before starting random walk
+        self.listening_duration = 5.0  # seconds to listen before starting random walk
         self.listening_timer = None
         self.is_listening = False
 
@@ -108,7 +108,7 @@ class ReasoningNode(Node):
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
         # Start listening behavior in IDLE state (with delay to let services initialize)
-        time.sleep(30)
+        time.sleep(25)
         self.start_idle_behavior()
 
     def start_idle_behavior(self):
@@ -238,6 +238,7 @@ class ReasoningNode(Node):
 
     # Callbacks
     def on_path_status(self, msg):
+        self.get_logger().info(f"Path status received:{msg.data}")
         if msg.data == "finished":
             self.waiting_for_path_completion = False  # Reset waiting flag
 
@@ -306,8 +307,13 @@ class ReasoningNode(Node):
                 return
             
             # 5. Send go_to_location command
-            go_to_result = self.send_path_command("go_to_location", location, sync=True)
-            if go_to_result.success:
+            go_to_result = self.send_path_command("go_to_location", location, sync=False)
+            rclpy.spin_until_future_complete(self, go_to_result, timeout_sec=10.0)
+            # Check if the command was successful
+            if go_to_result.result() is None:
+                self.get_logger().error("Failed to get result for go_to_location command.")
+                return
+            if go_to_result.result().success:
                 self.get_logger().info(f"Approaching person {msg.person_id} at {location}")
                 self.state = TiagoState.WALKING_TO_AREA
             else:
@@ -371,7 +377,7 @@ class ReasoningNode(Node):
         if self.state != TiagoState.CONVERSATION:
             return
 
-        self.get_logger().info(f"Conversation status: {msg.status}, Person ID: {msg.person_id}")
+        self.get_logger().info(f"Conversation status: {msg.status}")
 
         if msg.status == "finished":
             self.get_logger().info("Conversation finished")
@@ -403,7 +409,7 @@ class ReasoningNode(Node):
         dz = position.z - self.robot_position.z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-        if distance < 2.5:
+        if distance < 2.0:
             return "close"
         elif distance < 3.0:
             return "medium"
@@ -440,9 +446,9 @@ class ReasoningNode(Node):
         dz /= norm
         # Move 1 meter in front of the person
         approach_distance = 1.0
-        new_x = position.x + dx * approach_distance
-        new_y = position.y + dy * approach_distance
-        new_z = position.z + dz * approach_distance
+        new_x = position.x - dx * approach_distance
+        new_y = position.y - dy * approach_distance
+        new_z = position.z - dz * approach_distance
         return Point(x=new_x, y=new_y, z=new_z)
 
     # Service calls (simple async)
