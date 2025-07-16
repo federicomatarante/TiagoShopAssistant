@@ -181,7 +181,20 @@ class ShopAssistant:
         sys_inst: _ChatMessage = {"role": "system", "content": "\n".join(parts)}
         result_raw = self._chat([sys_inst, {"role": "user", "content": json.dumps(self.chat_history, indent=2)}])
         try:
-            return json.loads(result_raw)
+            result = json.loads(result_raw)
+            # Converting everything to string or None
+            for key, value in result.items():
+                if isinstance(value, dict):
+                    result[key] = {k: str(v) if v is not None else None for k, v in value.items()}
+                else:
+                    result[key] = str(value) if value is not None else None
+            # Converting follow_up_needed to boolean if it exists
+            if "follow_up_needed" in result:
+                try:
+                    result["follow_up_needed"] = bool(result["follow_up_needed"])
+                except ValueError:
+                    result["follow_up_needed"] = False
+            return result
         except json.JSONDecodeError as exc:
             print(f"[extract_knowledge] JSON decode error: {exc}", file=sys.stderr)
             return {}
@@ -194,6 +207,7 @@ class ShopAssistant:
         """Return 'product_info' | 'staff_info' | 'walk_to_product' | 'walk_to_staff' | 'finished' | '' """
         sys_content = (
             "You're a sports shop assistant. Your task is to analyze the conversation and determine what the user is asking for.\n"
+            " Focus more on the last few messages, but consider the whole conversation.\n"
             " Answer with JSON with the following structure:\n"
             " { 'conversation_direction': 'product_info' | 'staff_info' | 'walk_to_product' | 'walk_to_staff' | 'finished' | '' }.\n"
             " Where: \n"
@@ -201,7 +215,7 @@ class ShopAssistant:
             " - 'staff_info' means the user is asking about staff information or location in the shop.\n"
             " - 'walk_to_product' means the user wants to be walked to a product ( only if he asks it explicitly ).\n"
             " - 'walk_to_staff' means the user wants to be walked to a staff member ( only if he asks it explicitly ).\n"
-            " - 'finished' means the conversation is over and no further action is needed ( only if he asks it explicitly ).\n"
+            " - 'finished' when the conversation is clearly over or the customer is saying goodbye ( only if he asks it explicitly ).\n"
             " - '' means the conversation is not about any of the above.\n"
             " Just answer with ONE ( 1 ) JSON, no extra text, with the most likely direction.\n"
         )

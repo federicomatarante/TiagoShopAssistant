@@ -117,10 +117,10 @@ class ConversationNode(Node):
                 response.success = False
         elif command == "unknown_location":
             self.waiting_for_walk_confirmation = False
+            self.get_logger().warn("Received 'unknown_location' command. Need to handle this case.")
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you don't know where the product is located and you cannot walk him to it.")
             self._publish_assistant_reply(assistant_reply)
-            self.get_logger().warn("Received 'unknown_location' command. Need to handle this case.")
             response.success = True
         elif command == "area_reached":
             # This command is received when the robot finishes walking to area
@@ -357,6 +357,7 @@ class ConversationNode(Node):
 
             knowledge = self.current_assistant.extract_knowledge()
             if knowledge:
+                self.get_logger().info(f"Extracted knowledge for customer {self.current_customer_id}: {knowledge}")
                 # Asynchronously update customer information
                 self.db_client.update_customer_information(
                     self.current_customer_id,

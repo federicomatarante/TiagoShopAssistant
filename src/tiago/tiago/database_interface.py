@@ -61,62 +61,62 @@ class DatabaseInterface(Node):
 
         self.get_customer_information_service = self.create_service(
             GetCustomerInformation,
-            'get_customer_information',
+            '/get_customer_information',
             self.get_customer_information_callback
         )
 
         self.update_product_information_service = self.create_service(
             UpdateProductInformation,
-            'update_product_information',
+            '/update_product_information',
             self.update_product_information_callback
         )
 
         self.update_product_position_service = self.create_service(
             UpdateProductPosition,
-            'update_product_position',
+            '/update_product_position',
             self.update_product_position_callback
         )
 
         self.update_staff_position_service = self.create_service(
             UpdateStaffPosition,
-            'update_staff_position',
+            '/update_staff_position',
             self.update_staff_position_callback
         )
 
         self.update_staff_information_service = self.create_service(
             UpdateStaffInformation,
-            'update_staff_information',
+            '/update_staff_information',
             self.update_staff_information_callback
         )
 
         self.extract_relevant_products_service = self.create_service(
             ExtractRelevantProducts,
-            'extract_relevant_products',
+            '/extract_relevant_products',
             self.extract_relevant_products_callback
         )
 
         self.extract_relevante_staff_service = self.create_service(
             ExtractRelevantStaff,
-            'extract_relevant_staff',
+            '/extract_relevant_staff',
             self.extract_relevant_staff_callback
         )
 
         # New services
         self.get_product_location_service = self.create_service(
             GetProductLocation,
-            'get_product_location',
+            '/get_product_location',
             self.get_product_location_callback
         )
 
         self.get_staff_location_service = self.create_service(
             GetStaffLocation,
-            'get_staff_location',
+            '/get_staff_location',
             self.get_staff_location_callback
         )
 
         self.get_area_position_service = self.create_service(
             GetAreaPosition,
-            'get_area_position',
+            '/get_area_position',
             self.get_area_position_callback
         )
 
@@ -143,10 +143,12 @@ class DatabaseInterface(Node):
         try:
             # Convert request message to customer info dictionary using converter
             customer_info = customer_to_info(request.customer, remove_null=True)  # Access request.customer directly
-
+            self.get_logger().info(f"Customer info to update: {customer_info}")
             # Update customer information through data interface
             updated_customer = self.data_interface.update_customer_information(request.customer.customer_id,
                                                                                customer_info)
+            self.get_logger().info(
+                f"Updated customer info: {updated_customer}")
             response.success = True
             self.get_logger().info(
                 f"Customer information updated successfully for customer_id: {request.customer.customer_id}")
@@ -236,6 +238,7 @@ class DatabaseInterface(Node):
 
     def extract_relevant_products_callback(self, request, response):
         self.get_logger().info("Request to extract relevant products.")
+        self.get_logger().info(f"Query received: {request.query}")
 
         query = product_query_to_dict(request.query)
 
@@ -247,6 +250,10 @@ class DatabaseInterface(Node):
             response.areas = areas if areas else []
             response.success = True
             self.get_logger().info(f"Successfully extracted {len(response.products)} relevant products.")
+            # Logging products enumerated
+            for i, product in enumerate(response.products, start=1):
+                self.get_logger().info(f"Product {i}: {product}. Area: {response.areas[i-1] if i-1 < len(response.areas) else 'N/A'}")
+
         except Exception as e:
             self.get_logger().error(f"Failed to extract relevant products: {e}")
             response.success = False
@@ -265,6 +272,9 @@ class DatabaseInterface(Node):
             response.areas = areas if areas else []
             response.success = True
             self.get_logger().info(f"Successfully extracted {len(response.staff)} relevant staff members.")
+            # Logging staff members enumerated
+            for i, staff in enumerate(response.staff, start=1):
+                self.get_logger().info(f"Staff {i}: {staff}. Area: {response.areas[i-1] if i-1 < len(response.areas) else 'N/A'}")
         except Exception as e:
             self.get_logger().error(f"Failed to extract relevant staff: {e}")
             response.success = False
