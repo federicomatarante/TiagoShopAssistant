@@ -111,6 +111,7 @@ class ReasoningNode(Node):
             Odometry, '/odom', self.on_odometry, self.qos_sensor)
 
         # Start initial idle behavior
+        time.sleep(25)
         self.start_idle_behavior()
 
     def start_idle_behavior(self):
@@ -240,7 +241,7 @@ class ReasoningNode(Node):
                 self.create_timer(2.0, self.start_next_idle_cycle)
             elif self.state == TiagoState.WALKING_TO_AREA:
                 self.get_logger().info("Reached area - resuming conversation")
-                self._send_hri_command_async("resume_conversation")
+                self._send_hri_command_async("area_reached")
                 self.state = TiagoState.CONVERSATION
             elif self.state == TiagoState.APPROACHING_PERSON:
                 self.get_logger().info("Reached approaching point - starting conversation")
@@ -397,8 +398,6 @@ class ReasoningNode(Node):
             future.add_done_callback(
                 lambda f: self._handle_get_area_location_response(f, area_name_to_walk)
             )
-            # Temporarily pause conversation until we know if we can walk
-            self._send_hri_command_async("pause_conversation")
 
     def _handle_get_area_location_response(self, future, area_name):
         """Callback to process the response from the GetAreaPosition service."""
@@ -428,12 +427,10 @@ class ReasoningNode(Node):
                 self.get_logger().error(
                     f"Failed to get location for area '{area_name}' or service returned success=False. Result: {result}")
                 self._send_hri_command_async("unknown_location")
-                self.go_to_idle()  # Revert to idle if area lookup fails
 
         except Exception as e:
             self.get_logger().error(f"Service call for GetAreaPosition failed during callback: {e}")
             self._send_hri_command_async("unknown_location")
-            self.go_to_idle()
 
     def _handle_go_to_area_sent_response(self, future, area_name):
         """Callback to handle the response after sending go_to_location for an area."""
@@ -445,7 +442,6 @@ class ReasoningNode(Node):
             else:
                 self.get_logger().error(
                     f"Failed to send go-to-location command for area {area_name}. Response: {response}")
-                self.go_to_idle()  # Go back to idle if path command failed
         except Exception as e:
             self.get_logger().error(f"Error checking go-to-location command response for area {area_name}: {e}")
             self.go_to_idle()

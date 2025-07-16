@@ -142,7 +142,7 @@ class ShopAssistant:
 
         parts = [
             "You are a sports shop assistant.",
-            "You do not do physical action – like walking– you just provide information.",
+            "You do not do physical action – like walking – unless instructed, you just provide information.",
             f"The person you're talking with is a {self.subject_info}.",
             "It's really important that you do not make up information, If the user asks for something you don't know, just say you don't know and try to help them in other ways.\n"
             f"This is what you know about the customer from previous conversations with them: {self.customer_information}",
@@ -255,7 +255,7 @@ class ShopAssistant:
         parts: List[str] = [
             "You're a sports shop assistant. Your role is to help customers or staffer in the shop."
             "Be concise and clear with the answer, like if you were having a normal conversation. "
-            "You do not do physical actions - like walking– you just provide information.",
+            "You do not do physical actions - like walking – unless instructed, you just provide information.",
             f"The person you're talking with is a {self.subject_info}.\n",
             "It's really important that you do not make up information, If the user asks for something you don't know, "
             "just say you don't know and try to help them in other ways.",

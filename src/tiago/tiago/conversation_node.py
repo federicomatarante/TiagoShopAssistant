@@ -26,6 +26,7 @@ class ConversationNode(Node):
         self.current_user_input: Optional[str] = None  # Store the input while async call is pending
         self.conversation_paused = False  # New state for pausing
         self.waiting_for_walk_confirmation = False  # New state for waiting for robot to start walking
+        self.walking_to_area = False  # New state to track if walking to area is in progress
 
         # Database service client
         self.db_client = DatabaseServiceClient(self)
@@ -105,19 +106,34 @@ class ConversationNode(Node):
             if self.waiting_for_walk_confirmation and self.current_assistant:
                 self.get_logger().info("Received 'walking_to_area' confirmation. Responding to customer.")
                 self.waiting_for_walk_confirmation = False
+                self.walking_to_area = True
                 assistant_reply = self.current_assistant.answer(
                     option="Say the customer you're going to walk him to the asked location")
                 self._publish_assistant_reply(assistant_reply)
                 response.success = True
+
             else:
                 self.get_logger().warn("Received 'walking_to_staff' but not in waiting state or no active assistant.")
                 response.success = False
         elif command == "unknown_location":
+            self.waiting_for_walk_confirmation = False
             assistant_reply = self.current_assistant.answer(
                 option="Say the customer you don't know where the product is located and you cannot walk him to it.")
             self._publish_assistant_reply(assistant_reply)
             self.get_logger().warn("Received 'unknown_location' command. Need to handle this case.")
             response.success = True
+        elif command == "area_reached":
+            # This command is received when the robot finishes walking to area
+            if self.walking_to_area:
+                self.get_logger().info("Received 'area_reached' confirmation. Conversation can continue.")
+                self.walking_to_area = False
+                answer = self.current_assistant.answer(
+                    option="Say the customer you have arrived at the location and ask if he needs further assistance.")
+                self._publish_assistant_reply(answer)
+                response.success = True
+            else:
+                self.get_logger().warn("Received 'area_reached' but not currently walking to an area.")
+                response.success = False
         else:
             self.get_logger().warn(f"Unknown command received: {command}")
             response.success = False
@@ -130,6 +146,8 @@ class ConversationNode(Node):
                 self.get_logger().warn("Received speech input but no active conversation.")
             elif self.conversation_paused:
                 self.get_logger().info("Received speech input but conversation is paused.")
+            elif self.walking_to_area:
+                self.get_logger().info("Received speech input but currently walking to area. Ignoring input.")
             return
 
         user_input = msg.data.strip()
